@@ -3,7 +3,9 @@ import type { Guven, HataYaniti, Isaret, Kutu, ParcaSatiri } from '../shared/tip
 
 // Güncel model listesi: https://ai.google.dev/gemini-api/docs/models
 const VARSAYILAN_MODEL = 'gemini-3.8-flash';
-const ISTEK_SURE_SINIRI_MS = 75_000;
+// Telefon 120 sn'de vazgeçiyor: tüm denemeler 100 sn'ye sığmalı; ana model en fazla 55 sn bekler
+const TOPLAM_SURE_SINIRI_MS = 100_000;
+const ANA_MODEL_SURE_MS = 55_000;
 const YEDEK_MODEL = 'gemini-3.5-flash-lite';
 
 export class GeminiHatasi extends Error {
@@ -48,33 +50,49 @@ async function geminiJson(
   ekAyarlar: Record<string, unknown> = {},
 ): Promise<any> {
   const modeller = [...new Set([model || VARSAYILAN_MODEL, YEDEK_MODEL])];
-  let yanit!: Response;
+  const baslangic = Date.now();
+  const kalanSure = () => TOPLAM_SURE_SINIRI_MS - (Date.now() - baslangic);
+  let yanit: Response | null = null;
   let veri: GeminiYaniti = {};
-  const iste = async (m: string, ek: Record<string, unknown>) => {
+  let zamanAsimi = false;
+
+  /** İsteği gönderir ve gövdeyi okur; süre dolarsa null döner */
+  const iste = async (m: string, ek: Record<string, unknown>, sure: number) => {
+    const t0 = Date.now();
     try {
-      return await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`, {
+      const y = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-goog-api-key': anahtar },
         body: JSON.stringify({
           contents: [{ role: 'user', parts }],
           generationConfig: { responseMimeType: 'application/json', responseSchema: sema, ...ek },
         }),
-        // Telefon 120 sn'de vazgeçiyor; ondan önce anlaşılır bir hata verelim
-        signal: AbortSignal.timeout(ISTEK_SURE_SINIRI_MS),
+        signal: AbortSignal.timeout(Math.max(1000, sure)),
       });
+      const v = (await y.json().catch(() => ({}))) as GeminiYaniti;
+      console.log('Gemini yanıtı', m, y.status, `${Date.now() - t0} ms`);
+      return { y, v };
     } catch (e) {
-      console.error('Gemini isteği zaman aşımı / ağ hatası', m, e);
-      throw new GeminiHatasi('Yapay zeka çok uzun düşündü. Biraz bekleyip tekrar dene.', 'sunucu', 504);
+      console.error('Gemini isteği zaman aşımı / ağ hatası', m, `${Date.now() - t0} ms`, e);
+      return null;
     }
   };
-  for (const m of modeller) {
-    yanit = await iste(m, ekAyarlar);
-    veri = (await yanit.json().catch(() => ({}))) as GeminiYaniti;
-    if (yanit.status === 400 && Object.keys(ekAyarlar).length && !/API key/i.test(veri.error?.message ?? '')) {
-      console.error('Gemini ek ayarları reddetti, ayarsız deneniyor', m, veri.error?.message);
-      yanit = await iste(m, {});
-      veri = (await yanit.json().catch(() => ({}))) as GeminiYaniti;
+
+  for (const [i, m] of modeller.entries()) {
+    if (kalanSure() < 5000) break;
+    // Ana model en fazla ANA_MODEL_SURE_MS bekler; kalan süre yedek modele kalır
+    const sure = i === 0 && modeller.length > 1 ? Math.min(ANA_MODEL_SURE_MS, kalanSure()) : kalanSure();
+    let sonuc = await iste(m, ekAyarlar, sure);
+    if (sonuc && sonuc.y.status === 400 && Object.keys(ekAyarlar).length && !/API key/i.test(sonuc.v.error?.message ?? '')) {
+      console.error('Gemini ek ayarları reddetti, ayarsız deneniyor', m, sonuc.v.error?.message);
+      sonuc = await iste(m, {}, Math.min(sure, kalanSure()));
     }
+    if (!sonuc) {
+      zamanAsimi = true;
+      continue; // süre doldu: yedek modeli dene
+    }
+    yanit = sonuc.y;
+    veri = sonuc.v;
     if (yanit.ok) {
       if (m !== modeller[0]) console.log('Yedek model kullanıldı', m);
       break;
@@ -83,6 +101,10 @@ async function geminiJson(
     if (![404, 429, 500, 503].includes(yanit.status)) break;
   }
 
+  if (!yanit?.ok && zamanAsimi && (!yanit || yanit.status !== 429)) {
+    throw new GeminiHatasi('Yapay zeka şu an çok yavaş. Biraz bekleyip tekrar dene.', 'sunucu', 504);
+  }
+  if (!yanit) throw new GeminiHatasi('Yapay zeka şu an cevap vermedi. Tekrar dene.', 'sunucu', 502);
   if (!yanit.ok) {
     if (yanit.status === 429) {
       throw new GeminiHatasi('Yapay zeka biraz yoruldu. Bir dakika sonra tekrar dene. (Günlük ücretsiz kota dolmuş olabilir.)', 'kota', 429);
@@ -171,8 +193,9 @@ async function tekSayim(resimBase64: string, anahtar: string, model: string | un
     SAYMA_SEMASI,
     anahtar,
     model,
-    // Küçük parçaları daha iyi görmesi için yüksek ayrıntı; tekrarlanabilir sonuç için sabit tohum
-    { mediaResolution: 'MEDIA_RESOLUTION_HIGH', seed: tohum },
+    // Küçük parçaları daha iyi görmesi için yüksek ayrıntı; tekrarlanabilir sonuç için sabit tohum;
+    // hızlı cevap için düşük düşünme seviyesi (model kabul etmezse ayarsız tekrar denenir)
+    { mediaResolution: 'MEDIA_RESOLUTION_HIGH', seed: tohum, thinkingConfig: { thinkingLevel: 'low' } },
   );
   const isaretler: Isaret[] = [];
   const satirlar = new Map<string, ParcaSatiri>();
