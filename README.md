@@ -1,4 +1,4 @@
-# Lego Yardımcı
+# Ilgaz'ın Lego Yardımcısı
 
 Lego parçalarının fotoğrafını çekip yapay zekaya (Gemini) saydıran, çocuk dostu bir PWA.
 Tablet ve telefonda tarayıcıdan açılır, ana ekrana eklenebilir.

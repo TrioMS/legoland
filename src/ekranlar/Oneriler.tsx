@@ -39,7 +39,7 @@ export function Oneriler({ tarama, onerileriKaydet, kodGerekli, geri }: Props) {
   return (
     <main className="ekran">
       <button className="geri-buton" onClick={geri}>⬅️ Parçalarım</button>
-      <h2 className="ekran-basligi">🏗️ Ne yapabilirim?</h2>
+      <h2 className="ekran-basligi">🏗️ Ilgaz, ne yapabiliriz?</h2>
       <div className="sekmeler buyuk">
         <button className={sekme === 'fikir' ? 'secili' : ''} onClick={() => setSekme('fikir')}>🤖 Fikirler</button>
         <button className={sekme === 'set' ? 'secili' : ''} onClick={() => setSekme('set')}>📦 LEGO Setleri</button>

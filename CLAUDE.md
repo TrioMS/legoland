@@ -1,6 +1,6 @@
-# Lego Yardımcı – proje notları
+# Ilgaz'ın Lego Yardımcısı – proje notları
 
-- Kullanıcı 7 yaşında bir çocuk: tüm arayüz metinleri **Türkçe**, butonlar büyük, dil sade.
+- Kullanıcı 7 yaşındaki Ilgaz (uygulama ona özel, metinlerde adı geçer): tüm arayüz metinleri **Türkçe**, butonlar büyük, dil sade.
 - Kod içi isimler de Türkçe (ekran, parca, renk…); bu düzeni koru.
 - Node.js bu makinede kurulu değil, taşınabilir sürüm var: `C:\Users\cagri.dincturk\tools\node-v22.23.3-win-x64`
   (Bash'te önce `export PATH="/c/Users/cagri.dincturk/tools/node-v22.23.3-win-x64:$PATH"`).

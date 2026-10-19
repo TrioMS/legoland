@@ -14,9 +14,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon-180x180.png'],
       manifest: {
-        name: 'Lego Yardımcı',
-        short_name: 'Lego',
-        description: 'Lego parçalarını say, yeni modeller keşfet',
+        name: "Ilgaz'ın Lego Yardımcısı",
+        short_name: 'Ilgaz Lego',
+        description: "Ilgaz'ın Lego parçalarını sayar, yeni modeller önerir",
         lang: 'tr',
         theme_color: '#d01012',
         background_color: '#fff8e1',

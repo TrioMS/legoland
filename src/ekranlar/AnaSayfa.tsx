@@ -5,14 +5,14 @@ export function AnaSayfa({ hata, fotoSecildi, kayitlar }: { hata: string | null;
     <main className="ekran ana">
       <header className="baslik-alani">
         <img src="/favicon.svg" alt="" className="logo" />
-        <h1>Lego Yardımcı</h1>
-        <p className="alt-baslik">Parçalarının fotoğrafını çek, ben sayayım!</p>
+        <h1>Ilgaz'ın Lego Yardımcısı</h1>
+        <p className="alt-baslik">Merhaba Ilgaz! 👋 Parçalarının fotoğrafını çek, ben sayayım!</p>
       </header>
 
       <div className="buton-yigini">
         <FotoButonlari fotoSecildi={fotoSecildi} />
         <button className="buyuk-buton sari" onClick={kayitlar}>
-          <span className="buton-emoji">📦</span> Kayıtlarım
+          <span className="buton-emoji">📦</span> Ilgaz'ın Kayıtları
         </button>
       </div>
 

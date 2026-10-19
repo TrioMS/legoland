@@ -43,7 +43,7 @@ export function ParcaListesi({ tarama, guncelle, parcaEkle, fotoEkle, oneriler, 
         <img src={tarama.resim} alt="Fotoğraf" className="ozet-resmi" onClick={() => setBuyukResim(true)} />
         <div>
           <div className="toplam-sayi">{toplam}</div>
-          <div className="toplam-yazi">parça buldum!</div>
+          <div className="toplam-yazi">parça buldum, Ilgaz!</div>
           {(tarama.fotoSayisi ?? 1) > 1 && <div className="foto-sayisi">📷 {tarama.fotoSayisi} fotoğraftan</div>}
         </div>
       </section>

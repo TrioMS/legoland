@@ -95,7 +95,7 @@ Rules:
 - Pieces that are partly hidden still count if you can identify them.
 - Do NOT count the table, floor, box, baseplates used as background, or non-LEGO objects.
 - "guven" is your confidence for that row: "yuksek" (sure), "orta" (probably), "dusuk" (guess).
-- "not": one short, friendly sentence in Turkish for a 7-year-old (e.g. advice like spreading pieces apart if they overlap). Leave empty if nothing to say.
+- "not": one short, friendly sentence in Turkish for a 7-year-old boy named Ilgaz; you may address him by name (e.g. advice like spreading pieces apart if they overlap). Leave empty if nothing to say.
 
 ${KATALOGLAR}`;
 
@@ -166,16 +166,16 @@ export async function modelOner(eldekiler: ParcaSatiri[], anahtar: string, model
     .map((s) => `${s.adet} x ${s.parcaId} (${parcaBul(s.parcaId).ipucu}) color ${s.renkId} (${renkBul(s.renkId).legoAdi})`)
     .join('\n');
 
-  const talimat = `You are a friendly LEGO master builder helping a 7-year-old child in Turkey.
-The child has ONLY these loose LEGO pieces:
+  const talimat = `You are a friendly LEGO master builder helping Ilgaz, a 7-year-old boy in Turkey.
+Ilgaz has ONLY these loose LEGO pieces:
 ${liste}
 
-Suggest 4 different, fun, simple models the child can build using ONLY these pieces.
+Suggest 4 different, fun, simple models Ilgaz can build using ONLY these pieces.
 Rules:
-- Never use a part id + color combination the child does not have, and never use more than the available count.
+- Never use a part id + color combination Ilgaz does not have, and never use more than the available count.
 - Mix kinds: e.g. a vehicle, an animal, a building or furniture, and something surprising.
 - Each model should use between 6 and 40 pieces (fewer if the child has few pieces). Simple, sturdy, recognizable.
-- "ad": short Turkish name (2-4 words). "emoji": one emoji. "aciklama": one or two short, cheerful Turkish sentences a 7-year-old understands.
+- "ad": short Turkish name (2-4 words). "emoji": one emoji. "aciklama": one or two short, cheerful Turkish sentences Ilgaz (7) understands; you may address him by name.
 - "zorluk": 1 (very easy), 2 (medium) or 3 (challenging).
 - "parcalar": the exact pieces the model uses, with the same ids as above.
 
