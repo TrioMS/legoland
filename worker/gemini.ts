@@ -39,21 +39,38 @@ interface GeminiYaniti {
 }
 
 /** Gemini'den şemaya uygun JSON ister. Model kapalıysa/kota dolmuşsa yedek modeli dener. */
-async function geminiJson(parts: unknown[], sema: unknown, anahtar: string, model?: string): Promise<any> {
+async function geminiJson(
+  parts: unknown[],
+  sema: unknown,
+  anahtar: string,
+  model?: string,
+  /** İsteğe bağlı ayarlar (ör. yüksek görüntü çözünürlüğü); model kabul etmezse bunlarsız tekrar denenir */
+  ekAyarlar: Record<string, unknown> = {},
+): Promise<any> {
   const modeller = [...new Set([model || VARSAYILAN_MODEL, YEDEK_MODEL])];
   let yanit!: Response;
   let veri: GeminiYaniti = {};
-  for (const m of modeller) {
-    yanit = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`, {
+  const iste = (m: string, ek: Record<string, unknown>) =>
+    fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-goog-api-key': anahtar },
       body: JSON.stringify({
         contents: [{ role: 'user', parts }],
-        generationConfig: { responseMimeType: 'application/json', responseSchema: sema },
+        generationConfig: { responseMimeType: 'application/json', responseSchema: sema, ...ek },
       }),
     });
+  for (const m of modeller) {
+    yanit = await iste(m, ekAyarlar);
     veri = (await yanit.json().catch(() => ({}))) as GeminiYaniti;
-    if (yanit.ok) break;
+    if (yanit.status === 400 && Object.keys(ekAyarlar).length && !/API key/i.test(veri.error?.message ?? '')) {
+      console.error('Gemini ek ayarları reddetti, ayarsız deneniyor', m, veri.error?.message);
+      yanit = await iste(m, {});
+      veri = (await yanit.json().catch(() => ({}))) as GeminiYaniti;
+    }
+    if (yanit.ok) {
+      if (m !== modeller[0]) console.log('Yedek model kullanıldı', m);
+      break;
+    }
     console.error('Gemini hatası', m, yanit.status, veri.error);
     if (![404, 429, 500, 503].includes(yanit.status)) break;
   }
@@ -105,7 +122,7 @@ Rules:
 - Do NOT count the table, floor, box, baseplates used as background, or non-LEGO objects.
 - "guven" is your confidence for that row: "yuksek" (sure), "orta" (probably), "dusuk" (guess).
 - "kutular": for EVERY single piece in that row, give its bounding box as [ymin, xmin, ymax, xmax] normalized to 0-1000.
-  Exactly one box per piece, so "adet" must equal the number of boxes. Boxes should tightly fit each piece.
+  Try to give one box for every piece. "adet" is your careful total count for the row; do not lower it if you could not box every piece.
 - "not": one short, friendly sentence in Turkish for a 7-year-old boy named Ilgaz; you may address him by name (e.g. advice like spreading pieces apart if they overlap). Leave empty if nothing to say.
 
 ${KATALOGLAR}`;
@@ -123,7 +140,7 @@ const SAYMA_SEMASI = {
           kutular: { type: 'ARRAY', items: { type: 'ARRAY', items: { type: 'INTEGER' } } },
         },
         required: [...SATIR_SEMASI.required, 'guven', 'kutular'],
-        propertyOrdering: ['parcaId', 'renkId', 'kutular', 'adet', 'guven'],
+        propertyOrdering: ['parcaId', 'renkId', 'adet', 'guven', 'kutular'],
       },
     },
     not: { type: 'STRING' },
@@ -142,6 +159,8 @@ export async function parcalariTani(
     SAYMA_SEMASI,
     anahtar,
     model,
+    // Küçük parçaları daha iyi görmesi için fotoğrafı yüksek ayrıntıda işle
+    { mediaResolution: 'MEDIA_RESOLUTION_HIGH' },
   );
   const isaretler: Isaret[] = [];
   const parcalar: ParcaSatiri[] = (Array.isArray(ham?.parcalar) ? ham.parcalar : [])
@@ -149,8 +168,8 @@ export async function parcalariTani(
       const satir = { ...satirTemizle(s), guven: GUVENLER.includes(s?.guven) ? s.guven : 'orta' } as ParcaSatiri;
       const kutular = (Array.isArray(s?.kutular) ? s.kutular : []).map(kutuTemizle).filter(Boolean) as Kutu[];
       for (const kutu of kutular) isaretler.push({ parcaId: satir.parcaId, renkId: satir.renkId, kutu });
-      // Her parça için bir kutu istendi; kutu sayısı daha güvenilir bir sayımdır
-      if (kutular.length > 0) satir.adet = kutular.length;
+      // Kutular bazen eksik kalabilir; sayımı asla düşürme
+      satir.adet = Math.max(satir.adet, kutular.length);
       return satir;
     })
     .filter((s: ParcaSatiri) => s.adet > 0);
@@ -191,7 +210,7 @@ const ONERI_SEMASI = {
                       x: { type: 'INTEGER' },
                       y: { type: 'INTEGER' },
                       z: { type: 'INTEGER' },
-                      yon: { type: 'INTEGER', enum: [0, 90] },
+                      yon: { type: 'INTEGER', description: 'Rotation: 0 or 90' },
                     },
                     required: ['parcaId', 'renkId', 'x', 'y', 'z', 'yon'],
                     propertyOrdering: ['parcaId', 'renkId', 'x', 'y', 'z', 'yon'],
