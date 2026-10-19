@@ -4,7 +4,7 @@ import { taramaSil, taramalariListele, toplamAdet, type Tarama } from '../depo/t
 const tarihYaz = (t: number) =>
   new Date(t).toLocaleString('tr-TR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
 
-export function Kayitlar({ ac, geri }: { ac: (t: Tarama) => void; geri: () => void }) {
+export function Kayitlar({ ac }: { ac: (t: Tarama) => void }) {
   const [liste, setListe] = useState<Tarama[] | null>(null);
   useEffect(() => {
     taramalariListele().then(setListe);
@@ -18,7 +18,6 @@ export function Kayitlar({ ac, geri }: { ac: (t: Tarama) => void; geri: () => vo
 
   return (
     <main className="ekran">
-      <button className="geri-buton" onClick={geri}>🏠 Ana Sayfa</button>
       <h2 className="ekran-basligi">📦 Ilgaz'ın Kayıtları</h2>
       {liste?.length === 0 && <p className="bilgi-kutusu">Henüz kayıt yok Ilgaz. Bir fotoğraf çekerek başla!</p>}
       <ul className="kayit-listesi">

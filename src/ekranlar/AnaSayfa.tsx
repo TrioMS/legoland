@@ -1,30 +1,73 @@
 import { FotoButonlari } from '../bilesenler/FotoButonlari';
 
-export function AnaSayfa({ hata, fotoSecildi, kayitlar }: { hata: string | null; fotoSecildi: (f: File) => void; kayitlar: () => void }) {
+/** Yere dağılmış renkli parçalar çizimi */
+function DagilmisParcalar() {
+  const parcalar: [number, number, number, number, number, string][] = [
+    // x, y, genişlik, yükseklik, açı, renk
+    [40, 60, 70, 34, -12, '#ffc629'],
+    [140, 30, 46, 46, 8, '#2f6fed'],
+    [215, 70, 92, 34, 18, '#1f9d55'],
+    [330, 40, 46, 30, -20, '#ffffff'],
+    [80, 120, 46, 30, 25, '#1d1b19'],
+    [170, 115, 70, 34, -6, '#e5383b'],
+    [270, 125, 46, 46, -14, '#ff6ec7'],
+    [350, 105, 34, 34, 10, '#ffc629'],
+  ];
+  return (
+    <svg className="dagilmis" viewBox="0 0 420 180" aria-hidden>
+      {parcalar.map(([x, y, g, h, a, r], i) => {
+        const civi = Math.max(1, Math.round(g / 24));
+        return (
+          <g key={i} transform={`rotate(${a} ${x + g / 2} ${y + h / 2})`}>
+            <rect x={x} y={y + 4} width={g} height={h} rx="5" fill="rgba(0,0,0,.18)" />
+            <rect x={x} y={y} width={g} height={h} rx="5" fill={r} />
+            {Array.from({ length: civi }, (_, c) =>
+              Array.from({ length: Math.max(1, Math.round(h / 24)) }, (_, s) => (
+                <circle
+                  key={`${c}-${s}`}
+                  cx={x + ((c + 0.5) * g) / civi}
+                  cy={y + ((s + 0.5) * h) / Math.max(1, Math.round(h / 24))}
+                  r="6.5"
+                  fill={r}
+                  stroke="rgba(0,0,0,.18)"
+                  strokeWidth="1.5"
+                />
+              )),
+            )}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+export function AnaSayfa({ hata, fotoSecildi }: { hata: string | null; fotoSecildi: (f: File) => void }) {
   return (
     <main className="ekran ana">
-      <header className="baslik-alani">
+      <header className="karsilama">
         <img src="/favicon.svg" alt="" className="logo" />
-        <h1>Ilgaz'ın Lego Yardımcısı</h1>
-        <p className="alt-baslik">Merhaba Ilgaz! 👋 Parçalarının fotoğrafını çek, ben sayayım!</p>
+        <div>
+          <p className="selam">Merhaba Ilgaz 👋</p>
+          <h1>Bugün ne yapalım?</h1>
+        </div>
       </header>
 
-      <div className="buton-yigini">
-        <FotoButonlari fotoSecildi={fotoSecildi} />
-        <button className="buyuk-buton sari" onClick={kayitlar}>
-          <span className="buton-emoji">📦</span> Ilgaz'ın Kayıtları
-        </button>
-      </div>
+      <section className="tara-karti">
+        <DagilmisParcalar />
+        <h2>Parçalarını tara</h2>
+        <p>Parçalarını yere yay, fotoğrafını çek. Ben sayayım, sana neler yapabileceğini göstereyim!</p>
+        <FotoButonlari fotoSecildi={fotoSecildi} gorunum="deklansor" />
+      </section>
 
       {hata && <p className="hata-kutusu">{hata}</p>}
 
       <section className="ipucu">
-        <h2>💡 İyi fotoğraf için</h2>
-        <ul>
-          <li>Parçaları <b>düz ve tek renk</b> bir zemine yay.</li>
-          <li>Parçalar <b>üst üste binmesin</b>, aralarında boşluk olsun.</li>
-          <li>Aydınlık bir yerde, <b>tam yukarıdan</b> çek.</li>
-          <li>Çok parça varsa <b>birkaç parti</b> halinde çek.</li>
+        <h2>İyi fotoğraf için</h2>
+        <ul className="ipucu-listesi">
+          <li><span>🟫</span> Düz ve tek renk bir zemine yay</li>
+          <li><span>↔️</span> Parçalar üst üste binmesin</li>
+          <li><span>☀️</span> Aydınlık yerde, tam yukarıdan çek</li>
+          <li><span>📚</span> Çok parça varsa birkaç parti çek</li>
         </ul>
       </section>
 

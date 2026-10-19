@@ -10,13 +10,12 @@ interface Props {
   parcaEkle: () => void;
   fotoEkle: () => void;
   oneriler: () => void;
-  anaSayfa: () => void;
 }
 
 const parcaSirasi = (id: string) => PARCA_TURLERI.findIndex((p) => p.id === id);
 const renkSirasi = (id: string) => RENKLER.findIndex((r) => r.id === id);
 
-export function ParcaListesi({ tarama, guncelle, parcaEkle, fotoEkle, oneriler, anaSayfa }: Props) {
+export function ParcaListesi({ tarama, guncelle, parcaEkle, fotoEkle, oneriler }: Props) {
   const [duzenle, setDuzenle] = useState(false);
   const [buyukResim, setBuyukResim] = useState(false);
 
@@ -32,28 +31,31 @@ export function ParcaListesi({ tarama, guncelle, parcaEkle, fotoEkle, oneriler, 
 
   return (
     <main className="ekran">
-      <div className="ust-cubuk">
-        <button className="geri-buton" onClick={anaSayfa}>🏠 Ana Sayfa</button>
-        <button className={`geri-buton ${duzenle ? 'aktif' : ''}`} onClick={() => setDuzenle(!duzenle)}>
-          {duzenle ? '✅ Bitti' : '✏️ Düzelt'}
-        </button>
-      </div>
-
-      <section className="ozet">
-        <img src={tarama.resim} alt="Fotoğraf" className="ozet-resmi" onClick={() => setBuyukResim(true)} />
-        <div>
+      <button className="foto-baslik" onClick={() => setBuyukResim(true)} aria-label="Fotoğrafı büyüt">
+        <img src={tarama.resim} alt="" />
+        <div className="foto-baslik-yazi">
           <div className="toplam-sayi">{toplam}</div>
           <div className="toplam-yazi">parça buldum, Ilgaz!</div>
           {(tarama.fotoSayisi ?? 1) > 1 && <div className="foto-sayisi">📷 {tarama.fotoSayisi} fotoğraftan</div>}
         </div>
-      </section>
+      </button>
+
+      <div className="cip-satiri">
+        <button className={`cip ${duzenle ? 'aktif' : ''}`} onClick={() => setDuzenle(!duzenle)}>
+          {duzenle ? '✅ Bitti' : '✏️ Düzelt'}
+        </button>
+        {duzenle ? (
+          <button className="cip" onClick={parcaEkle}>➕ Parça ekle</button>
+        ) : (
+          <button className="cip" onClick={fotoEkle}>📷 Fotoğraf ekle</button>
+        )}
+      </div>
 
       {tarama.sahte && <p className="bilgi-kutusu">🧪 Deneme modu: bu sonuçlar örnek.</p>}
       {tarama.not && !tarama.sahte && <p className="bilgi-kutusu">💬 {tarama.not}</p>}
       {supheliVar && !duzenle && (
         <p className="bilgi-kutusu sari-kutu">🤔 Sarı çerçeveli parçalardan emin değilim. Yanlışsa <b>Düzelt</b>'e bas.</p>
       )}
-
       {sirali.length === 0 && <p className="bilgi-kutusu">Hiç parça bulamadım. Parça ekleyebilir ya da yeni fotoğraf çekebilirsin.</p>}
 
       <ul className="parca-izgarasi">
@@ -80,23 +82,13 @@ export function ParcaListesi({ tarama, guncelle, parcaEkle, fotoEkle, oneriler, 
         })}
       </ul>
 
-      <div className="buton-yigini">
-        {duzenle && (
-          <button className="buyuk-buton yesil" onClick={parcaEkle}>
-            <span className="buton-emoji">➕</span> Parça Ekle
+      {!duzenle && sirali.length > 0 && (
+        <div className="yapiskan-eylem">
+          <button className="buyuk-buton turuncu" onClick={oneriler}>
+            <span className="buton-emoji">💡</span> Ne yapabilirim?
           </button>
-        )}
-        {!duzenle && (
-          <>
-            <button className="buyuk-buton kirmizi" onClick={oneriler} disabled={sirali.length === 0}>
-              <span className="buton-emoji">🏗️</span> Ne yapabilirim?
-            </button>
-            <button className="buyuk-buton mavi" onClick={fotoEkle}>
-              <span className="buton-emoji">📷</span> Fotoğraf ekle
-            </button>
-          </>
-        )}
-      </div>
+        </div>
+      )}
 
       {buyukResim && (
         <div className="tam-ekran" onClick={() => setBuyukResim(false)}>

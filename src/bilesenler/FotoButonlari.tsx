@@ -1,7 +1,14 @@
 import { useRef } from 'react';
 
-/** Kamera ve galeri için büyük butonlar. Dosya girişi HTTP'de de çalışır. */
-export function FotoButonlari({ fotoSecildi, kameraYazisi = 'Fotoğraf Çek' }: { fotoSecildi: (f: File) => void; kameraYazisi?: string }) {
+interface Props {
+  fotoSecildi: (f: File) => void;
+  kameraYazisi?: string;
+  /** 'deklansor': büyük yuvarlak kamera düğmesi (ana sayfa); 'buton': iki geniş düğme */
+  gorunum?: 'deklansor' | 'buton';
+}
+
+/** Kamera ve galeri düğmeleri. Dosya girişi HTTP'de de çalışır. */
+export function FotoButonlari({ fotoSecildi, kameraYazisi = 'Fotoğraf Çek', gorunum = 'buton' }: Props) {
   const kamera = useRef<HTMLInputElement>(null);
   const galeri = useRef<HTMLInputElement>(null);
 
@@ -11,16 +18,36 @@ export function FotoButonlari({ fotoSecildi, kameraYazisi = 'Fotoğraf Çek' }: 
     if (dosya) fotoSecildi(dosya);
   };
 
-  return (
+  const girisler = (
     <>
-      <button className="buyuk-buton kirmizi" onClick={() => kamera.current?.click()}>
-        <span className="buton-emoji">📷</span> {kameraYazisi}
-      </button>
-      <button className="buyuk-buton mavi" onClick={() => galeri.current?.click()}>
-        <span className="buton-emoji">🖼️</span> Galeriden Seç
-      </button>
       <input ref={kamera} type="file" accept="image/*" capture="environment" hidden onChange={degisti} />
       <input ref={galeri} type="file" accept="image/*" hidden onChange={degisti} />
+    </>
+  );
+
+  if (gorunum === 'deklansor') {
+    return (
+      <>
+        <button className="deklansor" onClick={() => kamera.current?.click()} aria-label={kameraYazisi}>
+          📷
+        </button>
+        <button className="metin-buton" onClick={() => galeri.current?.click()}>
+          🖼️ Galeriden seç
+        </button>
+        {girisler}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <button className="buyuk-buton turuncu" onClick={() => kamera.current?.click()}>
+        <span className="buton-emoji">📷</span> {kameraYazisi}
+      </button>
+      <button className="buyuk-buton ikincil" onClick={() => galeri.current?.click()}>
+        <span className="buton-emoji">🖼️</span> Galeriden Seç
+      </button>
+      {girisler}
     </>
   );
 }

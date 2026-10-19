@@ -18,8 +18,8 @@ export default defineConfig({
         short_name: 'Ilgaz Lego',
         description: "Ilgaz'ın Lego parçalarını sayar, yeni modeller önerir",
         lang: 'tr',
-        theme_color: '#d01012',
-        background_color: '#fff8e1',
+        theme_color: '#ff5a1f',
+        background_color: '#f6efe7',
         display: 'standalone',
         orientation: 'any',
         icons: [

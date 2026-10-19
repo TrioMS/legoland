@@ -18,14 +18,13 @@ interface Props {
   tarama: Tarama;
   onerileriKaydet: (o: ModelOnerisi[]) => void;
   kodGerekli: () => void;
-  geri: () => void;
 }
 
 type Secili = { tur: 'model'; model: ModelOnerisi } | { tur: 'set'; set: SetEslesmesi } | null;
 
-const yildizlar = (n: number) => '⭐'.repeat(n);
+const yildizlar = (n: number) => '★'.repeat(n) + '☆'.repeat(3 - n);
 
-export function Oneriler({ tarama, onerileriKaydet, kodGerekli, geri }: Props) {
+export function Oneriler({ tarama, onerileriKaydet, kodGerekli }: Props) {
   const [sekme, setSekme] = useState<'fikir' | 'set'>('fikir');
   const [secili, setSecili] = useState<Secili>(null);
 
@@ -38,10 +37,9 @@ export function Oneriler({ tarama, onerileriKaydet, kodGerekli, geri }: Props) {
 
   return (
     <main className="ekran">
-      <button className="geri-buton" onClick={geri}>⬅️ Parçalarım</button>
-      <h2 className="ekran-basligi">🏗️ Ilgaz, ne yapabiliriz?</h2>
+      <h2 className="ekran-basligi">Ilgaz, ne yapabiliriz?</h2>
       <div className="sekmeler buyuk">
-        <button className={sekme === 'fikir' ? 'secili' : ''} onClick={() => setSekme('fikir')}>🤖 Fikirler</button>
+        <button className={sekme === 'fikir' ? 'secili' : ''} onClick={() => setSekme('fikir')}>💡 Fikirler</button>
         <button className={sekme === 'set' ? 'secili' : ''} onClick={() => setSekme('set')}>📦 LEGO Setleri</button>
       </div>
       {sekme === 'fikir' ? (
@@ -100,20 +98,20 @@ function Fikirler({
           return (
             <li key={i}>
               <button className="oneri-karti" onClick={() => sec(m)}>
-                <span className="oneri-emoji">{m.emoji}</span>
+                <span className="oneri-gorsel">{m.emoji}</span>
                 <span className="oneri-adi">{m.ad}</span>
                 <span className="oneri-aciklama">{m.aciklama}</span>
                 <span className="oneri-alt">
-                  <span>{yildizlar(m.zorluk)}</span>
-                  <span>{k.toplam} parça</span>
+                  <span className="zorluk">{yildizlar(m.zorluk)}</span>
+                  <span>🧱 {k.toplam}</span>
+                  {eksik === 0 ? <span className="rozet yesil-rozet">Hepsi var</span> : <span className="rozet sari-rozet">{eksik} eksik</span>}
                 </span>
-                {eksik === 0 ? <span className="rozet yesil-rozet">✅ Hepsi var</span> : <span className="rozet sari-rozet">{eksik} parça eksik</span>}
               </button>
             </li>
           );
         })}
       </ul>
-      <button className="buyuk-buton mavi" onClick={getir}>
+      <button className="buyuk-buton ikincil" onClick={getir}>
         <span className="buton-emoji">🔄</span> Yeni fikirler
       </button>
     </>
@@ -147,7 +145,7 @@ function ModelDetay({ model, eldekiler, geri }: { model: ModelOnerisi; eldekiler
     <main className="ekran">
       <button className="geri-buton" onClick={geri}>⬅️ Fikirler</button>
       <section className="detay-baslik">
-        <span className="detay-emoji">{model.emoji}</span>
+        <span className="detay-gorsel">{model.emoji}</span>
         <div>
           <h2 className="ekran-basligi">{model.ad}</h2>
           <p className="detay-aciklama">{model.aciklama}</p>
@@ -186,7 +184,7 @@ function Setler({ eldekiler, sec }: { eldekiler: ParcaSatiri[]; sec: (s: SetEsle
         {setler.map((s) => (
           <li key={s.no}>
             <button className="set-karti" onClick={() => sec(s)}>
-              <img src={setResmi(s.no)} alt="" loading="lazy" />
+              <img src={setResmi(s.no)} alt="" loading="lazy" onError={(e) => (e.currentTarget.style.visibility = 'hidden')} />
               <span className="set-adi">{s.ad}</span>
               <span className="set-alt">{s.tema} · {s.yil}</span>
               <span className="uyum-cubugu"><span style={{ width: `${Math.round(s.oran * 100)}%` }} /></span>

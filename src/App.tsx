@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { birlestir, type ModelOnerisi, type ParcaSatiri } from '../shared/tipler';
 import { AnalizHatasi, analizEt, kucult } from './api/analiz';
-import { taramaGetir, taramaKaydet, type Tarama } from './depo/taramalar';
+import { taramaGetir, taramaKaydet, taramalariListele, type Tarama } from './depo/taramalar';
+import { AltMenu } from './bilesenler/AltMenu';
 import { AnaSayfa } from './ekranlar/AnaSayfa';
 import { Onizleme } from './ekranlar/Onizleme';
 import { Bekleme } from './ekranlar/Bekleme';
@@ -16,6 +17,7 @@ export type Ekran = 'ana' | 'onizleme' | 'bekleme' | 'liste' | 'ekle' | 'kayitla
 // Güncelleme sonrası sayfa yenilenirse çocuk kaldığı yerden devam etsin
 const KONUM_ANAHTARI = 'lego-konum';
 const TARAMALI_EKRANLAR: Ekran[] = ['liste', 'ekle', 'oneriler'];
+const MENULU_EKRANLAR: Ekran[] = ['ana', 'liste', 'oneriler', 'kayitlar'];
 const konumOku = (): { ekran: Ekran; taramaId?: string } => {
   try {
     return JSON.parse(localStorage.getItem(KONUM_ANAHTARI) ?? '') ?? { ekran: 'ana' };
@@ -43,8 +45,10 @@ export default function App() {
           setEkran(k.ekran);
         }
       });
-    } else if (k.ekran === 'kayitlar') {
-      setEkran('kayitlar');
+    } else {
+      if (k.ekran === 'kayitlar') setEkran('kayitlar');
+      // "Parçalarım" sekmesi hemen çalışsın diye son taramayı hazır tut
+      taramalariListele().then((l) => l[0] && setAktif((a) => a ?? l[0]));
     }
   }, []);
 
@@ -114,6 +118,16 @@ export default function App() {
     if (aktif) taramayiDegistir({ ...aktif, parcalar: birlestir(parcalar), oneriler: undefined });
   };
 
+  const icerik = ekranIcerigi();
+  if (!MENULU_EKRANLAR.includes(ekran)) return icerik;
+  return (
+    <>
+      {icerik}
+      <AltMenu ekran={ekran} taramaVar={Boolean(aktif)} git={setEkran} />
+    </>
+  );
+
+  function ekranIcerigi() {
   switch (ekran) {
     case 'onizleme':
       return (
@@ -146,7 +160,6 @@ export default function App() {
             setEkran('onizleme');
           }}
           oneriler={() => setEkran('oneriler')}
-          anaSayfa={() => setEkran('ana')}
         />
       ) : null;
     case 'ekle':
@@ -165,7 +178,6 @@ export default function App() {
           tarama={aktif}
           onerileriKaydet={(oneriler: ModelOnerisi[]) => taramayiDegistir({ ...aktif, oneriler })}
           kodGerekli={() => kodIste('oneriler')}
-          geri={() => setEkran('liste')}
         />
       ) : null;
     case 'kayitlar':
@@ -175,7 +187,6 @@ export default function App() {
             setAktif(t);
             setEkran('liste');
           }}
-          geri={() => setEkran('ana')}
         />
       );
     case 'kod':
@@ -186,6 +197,7 @@ export default function App() {
         />
       );
     default:
-      return <AnaSayfa hata={hata} fotoSecildi={fotoSecildi} kayitlar={() => setEkran('kayitlar')} />;
+      return <AnaSayfa hata={hata} fotoSecildi={fotoSecildi} />;
+  }
   }
 }
