@@ -3,9 +3,10 @@ import type { Guven, HataYaniti, Isaret, Kutu, ParcaSatiri } from '../shared/tip
 
 // Güncel model listesi: https://ai.google.dev/gemini-api/docs/models
 const VARSAYILAN_MODEL = 'gemini-3.8-flash';
-// Telefon 120 sn'de vazgeçiyor: tüm denemeler 100 sn'ye sığmalı; ana model en fazla 55 sn bekler
+// Telefon 120 sn'de vazgeçiyor: tüm denemeler 100 sn'ye sığmalı. Ana model süre dolarsa zayıf
+// yedek modele geçilmez (yedek çok az parça buluyor); sadece hata/kota durumunda yedeğe geçilir.
 const TOPLAM_SURE_SINIRI_MS = 100_000;
-const ANA_MODEL_SURE_MS = 55_000;
+const ANA_MODEL_SURE_MS = 95_000;
 const YEDEK_MODEL = 'gemini-3.5-flash-lite';
 
 export class GeminiHatasi extends Error {
@@ -89,7 +90,7 @@ async function geminiJson(
     }
     if (!sonuc) {
       zamanAsimi = true;
-      continue; // süre doldu: yedek modeli dene
+      break; // süre doldu: zayıf yedek modelle yanlış sayım vermektense hata göster
     }
     yanit = sonuc.y;
     veri = sonuc.v;
@@ -187,15 +188,15 @@ interface Sayim {
   toplam: number;
 }
 
-async function tekSayim(resimBase64: string, anahtar: string, model: string | undefined, tohum: number): Promise<Sayim> {
+async function tekSayim(resimBase64: string, anahtar: string, model: string | undefined): Promise<Sayim> {
   const ham = await geminiJson(
     [{ inline_data: { mime_type: 'image/jpeg', data: resimBase64 } }, { text: SAYMA_TALIMATI }],
     SAYMA_SEMASI,
     anahtar,
     model,
-    // Küçük parçaları daha iyi görmesi için yüksek ayrıntı; tekrarlanabilir sonuç için sabit tohum;
-    // hızlı cevap için düşük düşünme seviyesi (model kabul etmezse ayarsız tekrar denenir)
-    { mediaResolution: 'MEDIA_RESOLUTION_HIGH', seed: tohum, thinkingConfig: { thinkingLevel: 'low' } },
+    // Küçük parçaları daha iyi görmesi için yüksek ayrıntı. (Sabit tohum ve düşük düşünme denendi:
+    // yanıtlar 15 sn'den 55 sn'nin üstüne çıktı, kaldırıldı.)
+    { mediaResolution: 'MEDIA_RESOLUTION_HIGH' },
   );
   const isaretler: Isaret[] = [];
   const satirlar = new Map<string, ParcaSatiri>();
@@ -223,7 +224,7 @@ const ortanca = (dizi: number[]) => {
 
 /** Aynı fotoğrafı kaç kez bağımsız saydıracağımız; sonuçların ortancası alınır */
 // Ücretsiz katmanda aynı anda birden çok istek çok yavaşlıyor (3 paralel istek 2 dakikayı aştı),
-// bu yüzden tek sayım yapılır. Tutarlılık için sabit tohum ve aynı fotoğraf önbelleği kullanılır.
+// bu yüzden tek sayım yapılır. Tutarlılık için aynı fotoğraf önbelleği kullanılır.
 const SAYIM_TEKRARI = 1;
 
 /**
@@ -237,7 +238,7 @@ export async function parcalariTani(
   model?: string,
 ): Promise<{ parcalar: ParcaSatiri[]; isaretler: Isaret[]; not?: string }> {
   const sonuclar = await Promise.allSettled(
-    Array.from({ length: SAYIM_TEKRARI }, (_, i) => tekSayim(resimBase64, anahtar, model, 1000 + i)),
+    Array.from({ length: SAYIM_TEKRARI }, (_, i) => tekSayim(resimBase64, anahtar, model)),
   );
   const sayimlar = sonuclar.flatMap((s) => (s.status === 'fulfilled' ? [s.value] : []));
   if (sayimlar.length === 0) throw (sonuclar[0] as PromiseRejectedResult).reason;
