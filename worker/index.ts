@@ -15,6 +15,8 @@ export interface Env {
 
 const app = new Hono<{ Bindings: Env }>();
 
+const SAYIM_SURUMU = 'v3-ortanca';
+
 const hata = (mesaj: string, kod: HataYaniti['kod']): HataYaniti => ({ hata: mesaj, kod });
 
 // Erişim kodu tanımlıysa tüm /api isteklerinde iste
@@ -63,9 +65,25 @@ app.post('/api/analiz', async (c) => {
     return c.json(hata('Yapay zeka anahtarı ayarlanmamış (GEMINI_API_KEY).', 'anahtar'), 500);
   }
 
+  // Aynı fotoğraf tekrar gönderilirse aynı sonuç dönsün (7 gün önbellek).
+  // Sayım yöntemi değişince SAYIM_SURUMU'nu artır ki eski sonuçlar kullanılmasın.
+  const ozet = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(govde.resim)))]
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+  const onbellekAnahtari = new Request(`https://onbellek.legoland/analiz/${SAYIM_SURUMU}/${ozet}`);
+  const onbellekte = await caches.default.match(onbellekAnahtari);
+  if (onbellekte) return c.json<AnalizYaniti>(await onbellekte.json());
+
   try {
     const sonuc = await parcalariTani(govde.resim, c.env.GEMINI_API_KEY, c.env.GEMINI_MODEL);
-    return c.json<AnalizYaniti>({ parcalar: birlestir(sonuc.parcalar), isaretler: sonuc.isaretler, not: sonuc.not });
+    const yanit: AnalizYaniti = { parcalar: birlestir(sonuc.parcalar), isaretler: sonuc.isaretler, not: sonuc.not };
+    c.executionCtx.waitUntil(
+      caches.default.put(
+        onbellekAnahtari,
+        new Response(JSON.stringify(yanit), { headers: { 'content-type': 'application/json', 'cache-control': 'max-age=604800' } }),
+      ),
+    );
+    return c.json<AnalizYaniti>(yanit);
   } catch (e) {
     return geminiHatasiniYanitla(c, e);
   }

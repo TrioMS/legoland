@@ -148,33 +148,87 @@ const SAYMA_SEMASI = {
   propertyOrdering: ['parcalar', 'not'],
 };
 
-export async function parcalariTani(
-  resimBase64: string,
-  anahtar: string,
-  model?: string,
-): Promise<{ parcalar: ParcaSatiri[]; isaretler: Isaret[]; not?: string }> {
+interface Sayim {
+  /** tür|renk → satır (aynı satır birden çok kez geldiyse toplanmış) */
+  satirlar: Map<string, ParcaSatiri>;
+  isaretler: Isaret[];
+  not?: string;
+  toplam: number;
+}
+
+async function tekSayim(resimBase64: string, anahtar: string, model: string | undefined, tohum: number): Promise<Sayim> {
   const ham = await geminiJson(
     [{ inline_data: { mime_type: 'image/jpeg', data: resimBase64 } }, { text: SAYMA_TALIMATI }],
     SAYMA_SEMASI,
     anahtar,
     model,
-    // Küçük parçaları daha iyi görmesi için fotoğrafı yüksek ayrıntıda işle
-    { mediaResolution: 'MEDIA_RESOLUTION_HIGH' },
+    // Küçük parçaları daha iyi görmesi için yüksek ayrıntı; tekrarlanabilir sonuç için sabit tohum
+    { mediaResolution: 'MEDIA_RESOLUTION_HIGH', seed: tohum },
   );
   const isaretler: Isaret[] = [];
-  const parcalar: ParcaSatiri[] = (Array.isArray(ham?.parcalar) ? ham.parcalar : [])
-    .map((s: any) => {
-      const satir = { ...satirTemizle(s), guven: GUVENLER.includes(s?.guven) ? s.guven : 'orta' } as ParcaSatiri;
-      const kutular = (Array.isArray(s?.kutular) ? s.kutular : []).map(kutuTemizle).filter(Boolean) as Kutu[];
-      for (const kutu of kutular) isaretler.push({ parcaId: satir.parcaId, renkId: satir.renkId, kutu });
-      // Kutular bazen eksik kalabilir; sayımı asla düşürme
-      satir.adet = Math.max(satir.adet, kutular.length);
-      return satir;
-    })
-    .filter((s: ParcaSatiri) => s.adet > 0);
-  if (parcalar.length === 0 && !ham?.not) {
+  const satirlar = new Map<string, ParcaSatiri>();
+  for (const s of Array.isArray(ham?.parcalar) ? ham.parcalar : []) {
+    const satir = { ...satirTemizle(s), guven: GUVENLER.includes(s?.guven) ? s.guven : 'orta' } as ParcaSatiri;
+    const kutular = (Array.isArray(s?.kutular) ? s.kutular : []).map(kutuTemizle).filter(Boolean) as Kutu[];
+    for (const kutu of kutular) isaretler.push({ parcaId: satir.parcaId, renkId: satir.renkId, kutu });
+    // Kutular bazen eksik kalabilir; sayımı asla düşürme
+    satir.adet = Math.max(satir.adet, kutular.length);
+    if (satir.adet <= 0) continue;
+    const k = `${satir.parcaId}|${satir.renkId}`;
+    const var_ = satirlar.get(k);
+    if (var_) var_.adet += satir.adet;
+    else satirlar.set(k, satir);
+  }
+  const toplam = [...satirlar.values()].reduce((t, s) => t + s.adet, 0);
+  return { satirlar, isaretler, toplam, not: typeof ham?.not === 'string' && ham.not.trim() ? ham.not.trim() : undefined };
+}
+
+const ortanca = (dizi: number[]) => {
+  const s = [...dizi].sort((a, b) => a - b);
+  const o = Math.floor(s.length / 2);
+  return s.length % 2 ? s[o] : Math.round((s[o - 1] + s[o]) / 2);
+};
+
+/** Aynı fotoğrafı kaç kez bağımsız saydıracağımız; sonuçların ortancası alınır */
+const SAYIM_TEKRARI = 3;
+
+/**
+ * Yapay zeka aynı fotoğrafta her seferinde biraz farklı sayabiliyor. Bu yüzden fotoğraf
+ * aynı anda 3 kez saydırılır ve her parça için ortanca adet alınır. Kutular, toplamı
+ * ortancaya en yakın sayımdan gelir. Sayımlardan bazıları başarısız olursa kalanlarla devam edilir.
+ */
+export async function parcalariTani(
+  resimBase64: string,
+  anahtar: string,
+  model?: string,
+): Promise<{ parcalar: ParcaSatiri[]; isaretler: Isaret[]; not?: string }> {
+  const sonuclar = await Promise.allSettled(
+    Array.from({ length: SAYIM_TEKRARI }, (_, i) => tekSayim(resimBase64, anahtar, model, 1000 + i)),
+  );
+  const sayimlar = sonuclar.flatMap((s) => (s.status === 'fulfilled' ? [s.value] : []));
+  if (sayimlar.length === 0) throw (sonuclar[0] as PromiseRejectedResult).reason;
+  if (sayimlar.length < SAYIM_TEKRARI) console.log('Sayımların bir kısmı başarısız oldu', sayimlar.length, '/', SAYIM_TEKRARI);
+
+  const sira: Guven[] = ['dusuk', 'orta', 'yuksek'];
+  const anahtarlar = new Set(sayimlar.flatMap((s) => [...s.satirlar.keys()]));
+  const parcalar: ParcaSatiri[] = [];
+  for (const k of anahtarlar) {
+    const adet = ortanca(sayimlar.map((s) => s.satirlar.get(k)?.adet ?? 0));
+    if (adet <= 0) continue;
+    const gorulen = sayimlar.flatMap((s) => (s.satirlar.has(k) ? [s.satirlar.get(k)!] : []));
+    // Bazı sayımlarda hiç görülmediyse ya da adetler farklıysa güven düşer
+    const adetlerAyni = gorulen.length === sayimlar.length && gorulen.every((g) => g.adet === adet);
+    let guven = gorulen.reduce<Guven>((g, s) => (sira.indexOf(s.guven) < sira.indexOf(g) ? s.guven : g), 'yuksek');
+    if (!adetlerAyni && guven === 'yuksek') guven = 'orta';
+    if (gorulen.length < sayimlar.length) guven = 'dusuk';
+    parcalar.push({ ...gorulen[0], adet, guven });
+  }
+
+  if (parcalar.length === 0 && !sayimlar.some((s) => s.not)) {
     throw new GeminiHatasi('Fotoğrafta parça bulunamadı. Daha yakından ve aydınlık bir yerde çekmeyi dene.', 'gecersiz', 422);
   }
-  return { parcalar, isaretler, not: typeof ham?.not === 'string' && ham.not.trim() ? ham.not.trim() : undefined };
+  const toplam = parcalar.reduce((t, s) => t + s.adet, 0);
+  const enYakin = sayimlar.reduce((a, b) => (Math.abs(b.toplam - toplam) < Math.abs(a.toplam - toplam) ? b : a));
+  return { parcalar, isaretler: enYakin.isaretler, not: enYakin.not ?? sayimlar.find((s) => s.not)?.not };
 }
 

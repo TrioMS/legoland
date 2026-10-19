@@ -189,6 +189,13 @@ export default function App() {
             setAktif(t);
             setEkran('liste');
           }}
+          silindi={(idler) => {
+            // Açık olan kayıt silindiyse onu bırak, varsa en yeni kaydı hazır tut
+            if (aktif && idler.includes(aktif.id)) {
+              setAktif(null);
+              taramalariListele().then((l) => l[0] && setAktif((a) => a ?? l[0]));
+            }
+          }}
         />
       );
     case 'kod':

@@ -452,3 +452,18 @@ button.detay-gorsel { border: none; padding: 0; cursor: pointer; }
 .kutlama p { margin: 0; font-size: 1.15rem; color: var(--soluk); }
 .oneri-gorsel, .detay-gorsel { position: relative; overflow: hidden; }
 .oneri-gorsel svg, .detay-gorsel svg { position: absolute; inset: 7%; width: 86%; height: 86%; }
+
+/* ---- Kayıtlarda çoklu seçim --------------------------------------------------- */
+.secim-cubugu { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.secim-cubugu .not-yazisi { flex: 1; min-width: 200px; }
+.secim-sayisi { flex: 1; font-size: 1.2rem; font-weight: 800; min-width: 120px; }
+.cip.tehlike { background: #ffe6e3; color: #b42318; }
+.kayit-ac { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.kayit-karti.secili { outline: 3px solid var(--turuncu); }
+.secim-kutusu {
+  width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
+  border: 3px solid var(--cizgi); background: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 900; color: #fff;
+}
+.secim-kutusu.dolu { background: var(--turuncu); border-color: var(--turuncu); }
