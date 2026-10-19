@@ -1,7 +1,9 @@
 import { PARCA_TURLERI, RENKLER } from '../shared/katalog';
 import type { Guven, HataYaniti, ParcaSatiri } from '../shared/tipler';
 
-const VARSAYILAN_MODEL = 'gemini-2.5-flash';
+// Güncel model listesi: https://ai.google.dev/gemini-api/docs/models
+const VARSAYILAN_MODEL = 'gemini-3.8-flash';
+const YEDEK_MODEL = 'gemini-3.5-flash-lite';
 
 export class GeminiHatasi extends Error {
   constructor(message: string, public kod: HataYaniti['kod'], public durum: number) {
@@ -59,12 +61,8 @@ interface GeminiYaniti {
   error?: { message?: string; status?: string };
 }
 
-export async function parcalariTani(
-  resimBase64: string,
-  anahtar: string,
-  model = VARSAYILAN_MODEL,
-): Promise<{ parcalar: ParcaSatiri[]; not?: string }> {
-  const yanit = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+function istekGonder(model: string, resimBase64: string, anahtar: string) {
+  return fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-goog-api-key': anahtar },
     body: JSON.stringify({
@@ -75,17 +73,31 @@ export async function parcalariTani(
         },
       ],
       generationConfig: {
-        temperature: 0.2,
         responseMimeType: 'application/json',
         responseSchema: SEMA,
       },
     }),
   });
+}
 
-  const veri = (await yanit.json().catch(() => ({}))) as GeminiYaniti;
+export async function parcalariTani(
+  resimBase64: string,
+  anahtar: string,
+  model?: string,
+): Promise<{ parcalar: ParcaSatiri[]; not?: string }> {
+  // Model kapatılmışsa (404), kota dolmuşsa (429) ya da geçici hata varsa sıradaki modeli dene
+  const modeller = [...new Set([model || VARSAYILAN_MODEL, YEDEK_MODEL])];
+  let yanit!: Response;
+  let veri: GeminiYaniti = {};
+  for (const m of modeller) {
+    yanit = await istekGonder(m, resimBase64, anahtar);
+    veri = (await yanit.json().catch(() => ({}))) as GeminiYaniti;
+    if (yanit.ok) break;
+    console.error('Gemini hatası', m, yanit.status, veri.error);
+    if (![404, 429, 500, 503].includes(yanit.status)) break;
+  }
 
   if (!yanit.ok) {
-    console.error('Gemini hatası', yanit.status, veri.error);
     if (yanit.status === 429) {
       throw new GeminiHatasi('Yapay zeka biraz yoruldu. Bir dakika sonra tekrar dene. (Günlük ücretsiz kota dolmuş olabilir.)', 'kota', 429);
     }
