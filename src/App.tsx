@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { birlestir, type ParcaSatiri } from '../shared/tipler';
+import { birlestir, type ModelOnerisi, type ParcaSatiri } from '../shared/tipler';
 import { AnalizHatasi, analizEt, kucult } from './api/analiz';
 import { taramaGetir, taramaKaydet, type Tarama } from './depo/taramalar';
 import { AnaSayfa } from './ekranlar/AnaSayfa';
@@ -9,11 +9,13 @@ import { ParcaListesi } from './ekranlar/ParcaListesi';
 import { ParcaEkle } from './ekranlar/ParcaEkle';
 import { Kayitlar } from './ekranlar/Kayitlar';
 import { KodEkrani } from './ekranlar/KodEkrani';
+import { Oneriler } from './ekranlar/Oneriler';
 
-export type Ekran = 'ana' | 'onizleme' | 'bekleme' | 'liste' | 'ekle' | 'kayitlar' | 'kod';
+export type Ekran = 'ana' | 'onizleme' | 'bekleme' | 'liste' | 'ekle' | 'kayitlar' | 'kod' | 'oneriler';
 
 // Güncelleme sonrası sayfa yenilenirse çocuk kaldığı yerden devam etsin
 const KONUM_ANAHTARI = 'lego-konum';
+const TARAMALI_EKRANLAR: Ekran[] = ['liste', 'ekle', 'oneriler'];
 const konumOku = (): { ekran: Ekran; taramaId?: string } => {
   try {
     return JSON.parse(localStorage.getItem(KONUM_ANAHTARI) ?? '') ?? { ekran: 'ana' };
@@ -27,10 +29,14 @@ export default function App() {
   const [aktif, setAktif] = useState<Tarama | null>(null);
   const [foto, setFoto] = useState<string | null>(null);
   const [hata, setHata] = useState<string | null>(null);
+  /** true ise yeni fotoğrafın parçaları aktif listeye eklenir */
+  const [ekleme, setEkleme] = useState(false);
+  /** Aile kodu girildikten sonra dönülecek ekran */
+  const [kodSonrasi, setKodSonrasi] = useState<Ekran>('ana');
 
   useEffect(() => {
     const k = konumOku();
-    if ((k.ekran === 'liste' || k.ekran === 'ekle') && k.taramaId) {
+    if (TARAMALI_EKRANLAR.includes(k.ekran) && k.taramaId) {
       taramaGetir(k.taramaId).then((t) => {
         if (t) {
           setAktif(t);
@@ -46,6 +52,16 @@ export default function App() {
     localStorage.setItem(KONUM_ANAHTARI, JSON.stringify({ ekran, taramaId: aktif?.id }));
     window.scrollTo(0, 0);
   }, [ekran, aktif?.id]);
+
+  const kodIste = (donus: Ekran) => {
+    setKodSonrasi(donus);
+    setEkran('kod');
+  };
+
+  const taramayiDegistir = (yeni: Tarama) => {
+    setAktif(yeni);
+    taramaKaydet(yeni);
+  };
 
   const fotoSecildi = async (dosya: File) => {
     setHata(null);
@@ -63,34 +79,39 @@ export default function App() {
     setEkran('bekleme');
     try {
       const sonuc = await analizEt(foto);
-      const kucukResim = await kucult(await (await fetch(foto)).blob(), 480, 0.75);
-      const tarama: Tarama = {
-        id: crypto.randomUUID(),
-        tarih: Date.now(),
-        resim: kucukResim,
-        parcalar: sonuc.parcalar,
-        not: sonuc.not,
-        sahte: sonuc.sahte,
-      };
-      await taramaKaydet(tarama);
-      setAktif(tarama);
+      if (ekleme && aktif) {
+        taramayiDegistir({
+          ...aktif,
+          parcalar: birlestir([...aktif.parcalar, ...sonuc.parcalar]),
+          not: sonuc.not ?? aktif.not,
+          fotoSayisi: (aktif.fotoSayisi ?? 1) + 1,
+          oneriler: undefined,
+        });
+      } else {
+        const tarama: Tarama = {
+          id: crypto.randomUUID(),
+          tarih: Date.now(),
+          resim: await kucult(await (await fetch(foto)).blob(), 480, 0.75),
+          parcalar: sonuc.parcalar,
+          not: sonuc.not,
+          sahte: sonuc.sahte,
+          fotoSayisi: 1,
+        };
+        await taramaKaydet(tarama);
+        setAktif(tarama);
+      }
       setFoto(null);
+      setEkleme(false);
       setEkran('liste');
     } catch (e) {
-      if (e instanceof AnalizHatasi && e.kod === 'erisim') {
-        setEkran('kod');
-        return;
-      }
+      if (e instanceof AnalizHatasi && e.kod === 'erisim') return kodIste('onizleme');
       setHata(e instanceof Error ? e.message : 'Bir şeyler ters gitti.');
       setEkran('onizleme');
     }
   };
 
   const parcalariGuncelle = (parcalar: ParcaSatiri[]) => {
-    if (!aktif) return;
-    const yeni = { ...aktif, parcalar: birlestir(parcalar) };
-    setAktif(yeni);
-    taramaKaydet(yeni);
+    if (aktif) taramayiDegistir({ ...aktif, parcalar: birlestir(parcalar), oneriler: undefined });
   };
 
   switch (ekran) {
@@ -99,12 +120,14 @@ export default function App() {
         <Onizleme
           foto={foto}
           hata={hata}
+          ekleme={ekleme}
           fotoSecildi={fotoSecildi}
           analizEt={analizBaslat}
           geri={() => {
             setFoto(null);
             setHata(null);
-            setEkran('ana');
+            setEkran(ekleme ? 'liste' : 'ana');
+            setEkleme(false);
           }}
         />
       );
@@ -116,6 +139,13 @@ export default function App() {
           tarama={aktif}
           guncelle={parcalariGuncelle}
           parcaEkle={() => setEkran('ekle')}
+          fotoEkle={() => {
+            setEkleme(true);
+            setFoto(null);
+            setHata(null);
+            setEkran('onizleme');
+          }}
+          oneriler={() => setEkran('oneriler')}
           anaSayfa={() => setEkran('ana')}
         />
       ) : null;
@@ -129,6 +159,15 @@ export default function App() {
           geri={() => setEkran('liste')}
         />
       );
+    case 'oneriler':
+      return aktif ? (
+        <Oneriler
+          tarama={aktif}
+          onerileriKaydet={(oneriler: ModelOnerisi[]) => taramayiDegistir({ ...aktif, oneriler })}
+          kodGerekli={() => kodIste('oneriler')}
+          geri={() => setEkran('liste')}
+        />
+      ) : null;
     case 'kayitlar':
       return (
         <Kayitlar
@@ -140,7 +179,12 @@ export default function App() {
         />
       );
     case 'kod':
-      return <KodEkrani tamam={() => (foto ? analizBaslat() : setEkran('ana'))} geri={() => setEkran(foto ? 'onizleme' : 'ana')} />;
+      return (
+        <KodEkrani
+          tamam={() => (kodSonrasi === 'onizleme' && foto ? analizBaslat() : setEkran(kodSonrasi))}
+          geri={() => setEkran(kodSonrasi === 'oneriler' ? 'liste' : foto ? 'onizleme' : 'ana')}
+        />
+      );
     default:
       return <AnaSayfa hata={hata} fotoSecildi={fotoSecildi} kayitlar={() => setEkran('kayitlar')} />;
   }

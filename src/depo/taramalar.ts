@@ -1,5 +1,5 @@
 import { createStore, del, get, set, values } from 'idb-keyval';
-import type { ParcaSatiri } from '../../shared/tipler';
+import type { ModelOnerisi, ParcaSatiri } from '../../shared/tipler';
 
 export interface Tarama {
   id: string;
@@ -9,6 +9,10 @@ export interface Tarama {
   parcalar: ParcaSatiri[];
   not?: string;
   sahte?: boolean;
+  /** Kaç fotoğraftan birleştirildi */
+  fotoSayisi?: number;
+  /** Yapay zekanın son model önerileri; parçalar değişince silinir */
+  oneriler?: ModelOnerisi[];
 }
 
 const depo = createStore('lego-yardimci', 'taramalar');

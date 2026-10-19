@@ -3,6 +3,8 @@
 GEMINI_API_KEY=
 # İsteğe bağlı: modeli değiştirmek için
 # GEMINI_MODEL=gemini-3.8-flash
+# İsteğe bağlı: setlerin hayran tasarımları (rebrickable.com → Settings → API)
+# REBRICKABLE_API_KEY=
 # İsteğe bağlı: dolu ise uygulama bir kez bu aile kodunu sorar (yabancıların kotanı harcamasını engeller)
 # ERISIM_KODU=
 # Anahtar olmadan arayüzü denemek için örnek veri döndürür

@@ -1,4 +1,4 @@
-import type { AnalizYaniti, HataYaniti } from '../../shared/tipler';
+import type { AnalizYaniti, HataYaniti, MocOnerisi, ModelOnerisi, ParcaSatiri } from '../../shared/tipler';
 
 const KOD_ANAHTARI = 'lego-erisim-kodu';
 
@@ -25,15 +25,15 @@ export async function kucult(dosya: Blob, enUzunKenar: number, kalite = 0.85): P
   return tuval.toDataURL('image/jpeg', kalite);
 }
 
-export async function analizEt(resimDataUrl: string): Promise<AnalizYaniti> {
+async function apiIstegi<T>(yol: string, govde?: unknown): Promise<T> {
   const zamanAsimi = new AbortController();
   const sayac = setTimeout(() => zamanAsimi.abort(), 120_000);
   let yanit: Response;
   try {
-    yanit = await fetch('/api/analiz', {
-      method: 'POST',
+    yanit = await fetch(yol, {
+      method: govde === undefined ? 'GET' : 'POST',
       headers: { 'content-type': 'application/json', 'x-erisim-kodu': erisimKodu.oku() },
-      body: JSON.stringify({ resim: resimDataUrl.split(',')[1] }),
+      body: govde === undefined ? undefined : JSON.stringify(govde),
       signal: zamanAsimi.signal,
     });
   } catch {
@@ -47,5 +47,14 @@ export async function analizEt(resimDataUrl: string): Promise<AnalizYaniti> {
     const h = veri as HataYaniti | null;
     throw new AnalizHatasi(h?.hata ?? 'Bir şeyler ters gitti. Tekrar dene.', h?.kod);
   }
-  return veri as AnalizYaniti;
+  return veri as T;
 }
+
+export const analizEt = (resimDataUrl: string) =>
+  apiIstegi<AnalizYaniti>('/api/analiz', { resim: resimDataUrl.split(',')[1] });
+
+export const modelOnerileriAl = async (parcalar: ParcaSatiri[]) =>
+  (await apiIstegi<{ modeller: ModelOnerisi[] }>('/api/oneri', { parcalar })).modeller;
+
+export const mocleriAl = (setNo: string) =>
+  apiIstegi<{ mocler: MocOnerisi[]; anahtarYok?: boolean }>(`/api/moc/${encodeURIComponent(setNo)}`);

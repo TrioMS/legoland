@@ -7,6 +7,29 @@ export interface ParcaSatiri {
   guven: Guven;
 }
 
+export interface ModelParcasi {
+  parcaId: string;
+  renkId: string;
+  adet: number;
+}
+
+export interface ModelOnerisi {
+  ad: string;
+  emoji: string;
+  aciklama: string;
+  zorluk: number;
+  parcalar: ModelParcasi[];
+}
+
+export interface MocOnerisi {
+  no: string;
+  ad: string;
+  parcaSayisi: number;
+  resim: string;
+  link: string;
+  tasarimci?: string;
+}
+
 export interface AnalizIstegi {
   /** base64 JPEG, "data:" öneki olmadan */
   resim: string;

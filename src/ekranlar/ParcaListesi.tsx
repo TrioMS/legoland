@@ -8,13 +8,15 @@ interface Props {
   tarama: Tarama;
   guncelle: (p: ParcaSatiri[]) => void;
   parcaEkle: () => void;
+  fotoEkle: () => void;
+  oneriler: () => void;
   anaSayfa: () => void;
 }
 
 const parcaSirasi = (id: string) => PARCA_TURLERI.findIndex((p) => p.id === id);
 const renkSirasi = (id: string) => RENKLER.findIndex((r) => r.id === id);
 
-export function ParcaListesi({ tarama, guncelle, parcaEkle, anaSayfa }: Props) {
+export function ParcaListesi({ tarama, guncelle, parcaEkle, fotoEkle, oneriler, anaSayfa }: Props) {
   const [duzenle, setDuzenle] = useState(false);
   const [buyukResim, setBuyukResim] = useState(false);
 
@@ -42,6 +44,7 @@ export function ParcaListesi({ tarama, guncelle, parcaEkle, anaSayfa }: Props) {
         <div>
           <div className="toplam-sayi">{toplam}</div>
           <div className="toplam-yazi">parça buldum!</div>
+          {(tarama.fotoSayisi ?? 1) > 1 && <div className="foto-sayisi">📷 {tarama.fotoSayisi} fotoğraftan</div>}
         </div>
       </section>
 
@@ -83,9 +86,16 @@ export function ParcaListesi({ tarama, guncelle, parcaEkle, anaSayfa }: Props) {
             <span className="buton-emoji">➕</span> Parça Ekle
           </button>
         )}
-        <button className="buyuk-buton gri" disabled title="Sonraki aşamada gelecek">
-          <span className="buton-emoji">🏗️</span> Ne yapabilirim? <small>(yakında)</small>
-        </button>
+        {!duzenle && (
+          <>
+            <button className="buyuk-buton kirmizi" onClick={oneriler} disabled={sirali.length === 0}>
+              <span className="buton-emoji">🏗️</span> Ne yapabilirim?
+            </button>
+            <button className="buyuk-buton mavi" onClick={fotoEkle}>
+              <span className="buton-emoji">📷</span> Fotoğraf ekle
+            </button>
+          </>
+        )}
       </div>
 
       {buyukResim && (
