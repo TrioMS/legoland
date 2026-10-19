@@ -1,4 +1,4 @@
-import type { AnalizYaniti, HataYaniti, MocOnerisi, ModelOnerisi, ParcaSatiri } from '../../shared/tipler';
+import type { AnalizYaniti, HataYaniti, MocOnerisi } from '../../shared/tipler';
 
 const KOD_ANAHTARI = 'lego-erisim-kodu';
 
@@ -53,8 +53,6 @@ async function apiIstegi<T>(yol: string, govde?: unknown): Promise<T> {
 export const analizEt = (resimDataUrl: string) =>
   apiIstegi<AnalizYaniti>('/api/analiz', { resim: resimDataUrl.split(',')[1] });
 
-export const modelOnerileriAl = async (parcalar: ParcaSatiri[]) =>
-  (await apiIstegi<{ modeller: ModelOnerisi[] }>('/api/oneri', { parcalar })).modeller;
 
 export const mocleriAl = (setNo: string) =>
   apiIstegi<{ mocler: MocOnerisi[]; anahtarYok?: boolean }>(`/api/moc/${encodeURIComponent(setNo)}`);

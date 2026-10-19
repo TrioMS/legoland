@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { registerSW } from 'virtual:pwa-register';
 import App from './App';
+import { Galeri } from './ekranlar/Galeri';
 import './stil.css';
 
 // Yeni sürüm yayınlanınca otomatik yüklenir. Uygulama açıkken saatte bir
@@ -20,6 +21,6 @@ registerSW({
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    {import.meta.env.DEV && location.search.includes('galeri') ? <Galeri /> : <App />}
   </StrictMode>,
 );

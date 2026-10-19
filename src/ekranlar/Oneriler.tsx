@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { parcaBul, renkBul } from '../../shared/katalog';
 import type { MocOnerisi, ModelOnerisi, ModelParcasi, ParcaSatiri } from '../../shared/tipler';
-import { AnalizHatasi, mocleriAl, modelOnerileriAl } from '../api/analiz';
+import { AnalizHatasi, mocleriAl } from '../api/analiz';
+import { kutuphaneOnerileri, type KutuphaneOnerisi } from '../oneriler/kutuphaneEslestir';
 import { ParcaResmi } from '../bilesenler/ParcaResmi';
 import { IzometrikModel } from '../bilesenler/IzometrikModel';
 import { Talimat } from './Talimat';
@@ -18,7 +19,6 @@ import {
 
 interface Props {
   tarama: Tarama;
-  onerileriKaydet: (o: ModelOnerisi[]) => void;
   kodGerekli: () => void;
 }
 
@@ -30,7 +30,7 @@ type Secili =
 
 const yildizlar = (n: number) => '★'.repeat(n) + '☆'.repeat(3 - n);
 
-export function Oneriler({ tarama, onerileriKaydet, kodGerekli }: Props) {
+export function Oneriler({ tarama, kodGerekli }: Props) {
   const [sekme, setSekme] = useState<'fikir' | 'set'>('fikir');
   const [secili, setSecili] = useState<Secili>(null);
 
@@ -61,7 +61,7 @@ export function Oneriler({ tarama, onerileriKaydet, kodGerekli }: Props) {
         <button className={sekme === 'set' ? 'secili' : ''} onClick={() => setSekme('set')}>📦 LEGO Setleri</button>
       </div>
       {sekme === 'fikir' ? (
-        <Fikirler tarama={tarama} onerileriKaydet={onerileriKaydet} kodGerekli={kodGerekli} sec={(model) => setSecili({ tur: 'model', model })} />
+        <Fikirler tarama={tarama} sec={(model) => setSecili({ tur: 'model', model })} />
       ) : (
         <Setler eldekiler={tarama.parcalar} sec={(set) => setSecili({ tur: 'set', set })} />
       )}
@@ -69,71 +69,66 @@ export function Oneriler({ tarama, onerileriKaydet, kodGerekli }: Props) {
   );
 }
 
-// ---- Yapay zeka fikirleri ----------------------------------------------------------
+// ---- Kütüphaneden fikirler ------------------------------------------------------------
 
-function Fikirler({
-  tarama,
-  onerileriKaydet,
-  kodGerekli,
-  sec,
-}: {
-  tarama: Tarama;
-  onerileriKaydet: (o: ModelOnerisi[]) => void;
-  kodGerekli: () => void;
-  sec: (m: ModelOnerisi) => void;
-}) {
-  const [yukleniyor, setYukleniyor] = useState(false);
-  const [hata, setHata] = useState<string | null>(null);
+function FikirKarti({ o, sec }: { o: KutuphaneOnerisi; sec: (m: ModelOnerisi) => void }) {
+  const eksik = o.kontrol.toplam - o.kontrol.sekilUyan;
+  const renkFarki = o.kontrol.sekilUyan - o.kontrol.tamUyan;
+  return (
+    <li>
+      <button className="oneri-karti" onClick={() => sec(o.oneri)}>
+        <span className="oneri-gorsel"><ModelGorseli model={o.oneri} /></span>
+        <span className="oneri-adi">{o.oneri.emoji} {o.oneri.ad}</span>
+        <span className="oneri-aciklama">{o.oneri.aciklama}</span>
+        <span className="oneri-alt">
+          <span className="zorluk">{yildizlar(o.oneri.zorluk)}</span>
+          <span>🧱 {o.kontrol.toplam}</span>
+          {eksik === 0 && renkFarki === 0 && <span className="rozet yesil-rozet">Hepsi var</span>}
+          {eksik === 0 && renkFarki > 0 && <span className="rozet yesil-rozet">Hepsi var · {renkFarki} renk farklı</span>}
+          {eksik > 0 && <span className="rozet sari-rozet">{eksik} parça eksik</span>}
+        </span>
+      </button>
+    </li>
+  );
+}
 
-  const getir = async () => {
-    setYukleniyor(true);
-    setHata(null);
-    try {
-      onerileriKaydet(await modelOnerileriAl(tarama.parcalar));
-    } catch (e) {
-      if (e instanceof AnalizHatasi && e.kod === 'erisim') return kodGerekli();
-      setHata(e instanceof Error ? e.message : 'Bir şeyler ters gitti.');
-    } finally {
-      setYukleniyor(false);
-    }
-  };
-
-  useEffect(() => {
-    // Eski kayıtlardaki fikirlerde 3D adımlar yok; onları da yenile
-    const eski = !tarama.oneriler || tarama.oneriler.every((m) => !m.adimlar?.length);
-    if (eski && tarama.parcalar.length > 0) getir();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+function Fikirler({ tarama, sec }: { tarama: Tarama; sec: (m: ModelOnerisi) => void }) {
+  const [hepsi, setHepsi] = useState(false);
+  const oneriler = useMemo(() => kutuphaneOnerileri(tarama.parcalar), [tarama.parcalar]);
 
   if (tarama.parcalar.length === 0) return <p className="bilgi-kutusu">Önce parça listesine birkaç parça eklemelisin.</p>;
-  if (yukleniyor) return <YukleniyorKutusu yazi="Parçalarına bakıp fikir düşünüyorum…" />;
+
+  const hazir = oneriler.filter((o) => o.oran === 1);
+  const yakin = oneriler.filter((o) => o.oran < 1 && o.oran >= 0.6);
+  const diger = oneriler.filter((o) => o.oran < 0.6);
 
   return (
     <>
-      {hata && <p className="hata-kutusu">{hata}</p>}
-      <ul className="oneri-izgarasi">
-        {tarama.oneriler?.map((m, i) => {
-          const k = parcalariKontrolEt(m.parcalar, tarama.parcalar);
-          const eksik = k.toplam - k.tamUyan;
-          return (
-            <li key={i}>
-              <button className="oneri-karti" onClick={() => sec(m)}>
-                <span className="oneri-gorsel"><ModelGorseli model={m} /></span>
-                <span className="oneri-adi">{m.ad}</span>
-                <span className="oneri-aciklama">{m.aciklama}</span>
-                <span className="oneri-alt">
-                  <span className="zorluk">{yildizlar(m.zorluk)}</span>
-                  <span>🧱 {k.toplam}</span>
-                  {eksik === 0 ? <span className="rozet yesil-rozet">Hepsi var</span> : <span className="rozet sari-rozet">{eksik} eksik</span>}
-                </span>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-      <button className="buyuk-buton ikincil" onClick={getir}>
-        <span className="buton-emoji">🔄</span> Yeni fikirler
-      </button>
+      {hazir.length > 0 ? (
+        <>
+          <h3 className="alt-baslik-kucuk">✅ Hemen yapabilirsin</h3>
+          <ul className="oneri-izgarasi">{hazir.map((o) => <FikirKarti key={o.model.id} o={o} sec={sec} />)}</ul>
+        </>
+      ) : (
+        <p className="bilgi-kutusu">Tam yapabileceğin bir model bulamadım ama aşağıdakilere çok az parça eksik! Eksik yerlere başka parça koyabilirsin.</p>
+      )}
+      {yakin.length > 0 && (
+        <>
+          <h3 className="alt-baslik-kucuk">🧩 Birkaç parça eksik</h3>
+          <ul className="oneri-izgarasi">{yakin.map((o) => <FikirKarti key={o.model.id} o={o} sec={sec} />)}</ul>
+        </>
+      )}
+      {diger.length > 0 &&
+        (hepsi ? (
+          <>
+            <h3 className="alt-baslik-kucuk">📚 Diğer modeller</h3>
+            <ul className="oneri-izgarasi">{diger.map((o) => <FikirKarti key={o.model.id} o={o} sec={sec} />)}</ul>
+          </>
+        ) : (
+          <button className="buyuk-buton ikincil" onClick={() => setHepsi(true)}>
+            📚 Diğer {diger.length} modeli de göster
+          </button>
+        ))}
     </>
   );
 }

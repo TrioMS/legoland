@@ -1,9 +1,9 @@
 import { Hono } from 'hono';
-import type { AnalizIstegi, AnalizYaniti, HataYaniti, MocOnerisi, ModelOnerisi, ParcaSatiri } from '../shared/tipler';
+import type { AnalizIstegi, AnalizYaniti, HataYaniti, MocOnerisi } from '../shared/tipler';
 import { birlestir } from '../shared/tipler';
-import { parcalariTani, modelOner, GeminiHatasi } from './gemini';
+import { parcalariTani, GeminiHatasi } from './gemini';
 import { setAlternatifleri } from './rebrickable';
-import { sahteIsaretler, sahteOneriler, sahteYanit } from './sahte';
+import { sahteIsaretler, sahteYanit } from './sahte';
 
 export interface Env {
   GEMINI_API_KEY?: string;
@@ -66,26 +66,6 @@ app.post('/api/analiz', async (c) => {
   try {
     const sonuc = await parcalariTani(govde.resim, c.env.GEMINI_API_KEY, c.env.GEMINI_MODEL);
     return c.json<AnalizYaniti>({ parcalar: birlestir(sonuc.parcalar), isaretler: sonuc.isaretler, not: sonuc.not });
-  } catch (e) {
-    return geminiHatasiniYanitla(c, e);
-  }
-});
-
-app.post('/api/oneri', async (c) => {
-  const govde = await c.req.json<{ parcalar?: ParcaSatiri[] }>().catch(() => null);
-  const parcalar = Array.isArray(govde?.parcalar) ? govde.parcalar.slice(0, 200) : [];
-  if (parcalar.length === 0) return c.json(hata('Önce parça listesi gerekli.', 'gecersiz'), 400);
-
-  if (c.env.SAHTE_MOD === '1') {
-    await new Promise((r) => setTimeout(r, 1500));
-    return c.json<{ modeller: ModelOnerisi[] }>({ modeller: sahteOneriler() });
-  }
-  if (!c.env.GEMINI_API_KEY) {
-    return c.json(hata('Yapay zeka anahtarı ayarlanmamış (GEMINI_API_KEY).', 'anahtar'), 500);
-  }
-  try {
-    const modeller = await modelOner(parcalar, c.env.GEMINI_API_KEY, c.env.GEMINI_MODEL);
-    return c.json<{ modeller: ModelOnerisi[] }>({ modeller });
   } catch (e) {
     return geminiHatasiniYanitla(c, e);
   }

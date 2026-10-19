@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { birlestir, type ModelOnerisi, type ParcaSatiri } from '../shared/tipler';
+import { birlestir, type ParcaSatiri } from '../shared/tipler';
 import { AnalizHatasi, analizEt, kucult } from './api/analiz';
 import { taramaGetir, taramaKaydet, taramalariListele, type Tarama } from './depo/taramalar';
 import { AltMenu } from './bilesenler/AltMenu';
@@ -179,7 +179,6 @@ export default function App() {
       return aktif ? (
         <Oneriler
           tarama={aktif}
-          onerileriKaydet={(oneriler: ModelOnerisi[]) => taramayiDegistir({ ...aktif, oneriler })}
           kodGerekli={() => kodIste('oneriler')}
         />
       ) : null;

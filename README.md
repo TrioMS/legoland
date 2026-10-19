@@ -7,7 +7,7 @@ Tablet ve telefonda tarayıcıdan açılır, ana ekrana eklenebilir.
 
 - [x] **Aşama 1 – MVP:** fotoğraftan parça listesi (tür, renk, adet), elle düzeltme, kayıtlar, birden çok fotoğrafı birleştirme
 - [x] **Aşama 2:** "Ne yapabilirim?" – yapay zeka model fikirleri, uyan resmi LEGO setleri, setlerin hayran tasarımları (MOC)
-- [ ] Aşama 3: adım adım montaj kılavuzu
+- [x] **Aşama 3:** elle tasarlanmış 27 modellik kütüphane (`shared/kutuphane.ts`), Ilgaz'ın parçalarına göre boyanır; 3D çizim ve adım adım kılavuz. Geliştirmede tüm modeller: `http://localhost:5173/?galeri`
 - [ ] Aşama 4: video desteği, iyileştirmeler
 
 ## Yapı

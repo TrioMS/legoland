@@ -13,7 +13,8 @@ export interface YapiParcasi {
   x: number;
   y: number;
   z: number;
-  yon: 0 | 90;
+  /** 0/90: uzun kenar x/y boyunca. 180/270: aynı yerleşim, eğim ters yöne iner */
+  yon: 0 | 90 | 180 | 270;
 }
 
 export interface Adim {
@@ -23,15 +24,20 @@ export interface Adim {
 export const EN_BUYUK_TABAN = 16;
 export const EN_BUYUK_YUKSEKLIK = 45;
 
-/** 3D çizilebilen parça türleri (tekerlek ve özel parçalar şimdilik yok) */
+/** 3D çizilebilen parça türleri */
 export function cizilebilir(parcaId: string): boolean {
   const s = parcaBul(parcaId).sekil;
-  return s === 'tugla' || s === 'plaka' || s === 'karo' || s === 'egim' || s === 'yuvarlak';
+  return (
+    s === 'tugla' || s === 'plaka' || s === 'karo' || s === 'egim' || s === 'yuvarlak' ||
+    parcaId === 'tekerlek' || parcaId === 'tekerlek-tutucu'
+  );
 }
 
 /** Parçanın plaka cinsinden yüksekliği */
 export function yukseklik(parcaId: string): number {
   const p = parcaBul(parcaId);
+  if (parcaId === 'tekerlek') return 4;
+  if (parcaId === 'tekerlek-tutucu') return 1;
   if (p.sekil === 'tugla' || p.sekil === 'egim') return 3;
   if (p.sekil === 'yuvarlak') return parcaId.includes('tugla') ? 3 : 1;
   return 1;
@@ -40,9 +46,49 @@ export function yukseklik(parcaId: string): number {
 /** Parçanın x/y yönündeki boyu (çivi), yöne göre */
 export function taban(p: Pick<YapiParcasi, 'parcaId' | 'yon'>): { gx: number; gy: number } {
   const t = parcaBul(p.parcaId);
-  const uzun = Math.max(t.en, t.boy);
-  const kisa = Math.min(t.en, t.boy);
-  return p.yon === 90 ? { gx: kisa, gy: uzun } : { gx: uzun, gy: kisa };
+  // Tekerlek yandan takılır: 2 çivi çapında, 1 çivi kalınlığında bir disk
+  const uzun = p.parcaId === 'tekerlek' ? 2 : Math.max(t.en, t.boy);
+  const kisa = p.parcaId === 'tekerlek' ? 1 : Math.min(t.en, t.boy);
+  return p.yon % 180 === 90 ? { gx: kisa, gy: uzun } : { gx: uzun, gy: kisa };
+}
+
+/**
+ * Eğimli parçanın hangi hücrelerinin eğimli olduğu ve eğimin hangi yöne indiği.
+ * - 1 çivi enindeki eğimler (1x2, kavisli 1x4) uzun kenar boyunca iner; ilk hücre düz kalır.
+ * - 2 çivi enindekiler (2x2, 2x4) kısa kenar boyunca iner; ilk sıra düz kalır.
+ * Ters eğim düz kutu gibi çizilir (null).
+ */
+export function egimBilgisi(p: YapiParcasi): {
+  egimli: (dx: number, dy: number) => boolean;
+  /** Eğimli hücrenin eğim boyunca sırası (1 = düz kısma en yakın) */
+  sira: (dx: number, dy: number) => number;
+  /** Eğimli hücre sayısı (eğim boyunca) */
+  boy: number;
+  yon: [number, number];
+  civisiz: boolean;
+} | null {
+  const t = parcaBul(p.parcaId);
+  if (t.sekil !== 'egim' || p.parcaId.includes('ters')) return null;
+  const { gx, gy } = taban(p);
+  const kavisli = p.parcaId.includes('kavisli');
+  const ince = Math.min(t.en, t.boy) === 1;
+  const geri = p.yon >= 180;
+  const uzunBoyuncaX = p.yon % 180 === 0;
+  const xBoyunca = ince ? uzunBoyuncaX : !uzunBoyuncaX;
+  const uzunluk = xBoyunca ? gx : gy;
+  // İleri: ilk hücre düz, sonrakiler iner. Geri: son hücre düz, öncekiler geriye iner.
+  const sira = (dx: number, dy: number) => {
+    const i = xBoyunca ? dx : dy;
+    return geri ? uzunluk - 1 - i : i;
+  };
+  const s = geri ? -1 : 1;
+  return {
+    egimli: (dx, dy) => sira(dx, dy) > 0,
+    sira,
+    boy: uzunluk - 1,
+    yon: xBoyunca ? [s, 0] : [0, s],
+    civisiz: kavisli,
+  };
 }
 
 const hucre = (x: number, y: number, z: number) => `${x},${y},${z}`;
