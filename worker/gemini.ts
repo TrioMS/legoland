@@ -1,4 +1,5 @@
 import { PARCA_TURLERI, RENKLER, parcaBul, renkBul } from '../shared/katalog';
+import { cizilebilir, yapiParcalari, yapiyiDuzelt, type Adim, type YapiParcasi } from '../shared/yapi';
 import type { Guven, HataYaniti, Isaret, Kutu, ModelOnerisi, ParcaSatiri } from '../shared/tipler';
 
 // Güncel model listesi: https://ai.google.dev/gemini-api/docs/models
@@ -159,7 +160,9 @@ export async function parcalariTani(
   return { parcalar, isaretler, not: typeof ham?.not === 'string' && ham.not.trim() ? ham.not.trim() : undefined };
 }
 
-// ---- Eldeki parçalarla model önerisi ----------------------------------------------
+// ---- Eldeki parçalarla 3D model önerisi --------------------------------------------
+
+const CIZILEBILIR_IDLER = PARCA_IDLERI.filter(cizilebilir);
 
 const ONERI_SEMASI = {
   type: 'OBJECT',
@@ -173,45 +176,111 @@ const ONERI_SEMASI = {
           emoji: { type: 'STRING' },
           aciklama: { type: 'STRING' },
           zorluk: { type: 'INTEGER' },
-          parcalar: { type: 'ARRAY', items: SATIR_SEMASI },
+          adimlar: {
+            type: 'ARRAY',
+            items: {
+              type: 'OBJECT',
+              properties: {
+                parcalar: {
+                  type: 'ARRAY',
+                  items: {
+                    type: 'OBJECT',
+                    properties: {
+                      parcaId: { type: 'STRING', enum: CIZILEBILIR_IDLER },
+                      renkId: { type: 'STRING', enum: RENK_IDLERI },
+                      x: { type: 'INTEGER' },
+                      y: { type: 'INTEGER' },
+                      z: { type: 'INTEGER' },
+                      yon: { type: 'INTEGER', enum: [0, 90] },
+                    },
+                    required: ['parcaId', 'renkId', 'x', 'y', 'z', 'yon'],
+                    propertyOrdering: ['parcaId', 'renkId', 'x', 'y', 'z', 'yon'],
+                  },
+                },
+              },
+              required: ['parcalar'],
+            },
+          },
         },
-        required: ['ad', 'emoji', 'aciklama', 'zorluk', 'parcalar'],
-        propertyOrdering: ['ad', 'emoji', 'aciklama', 'zorluk', 'parcalar'],
+        required: ['ad', 'emoji', 'aciklama', 'zorluk', 'adimlar'],
+        propertyOrdering: ['ad', 'emoji', 'aciklama', 'zorluk', 'adimlar'],
       },
     },
   },
   required: ['modeller'],
 };
 
+const KOORDINAT_ANLATIMI = `Coordinate system (a stud grid, like a LEGO baseplate):
+- x = studs to the right, y = studs to the back, z = height in PLATE units (a plate/tile is 1 high, a brick or slope is 3 high).
+- (x, y, z) is the corner of the piece with the smallest x, y and z.
+- "yon" 0: the piece's LONG side runs along x. "yon" 90: the long side runs along y.
+  Example: "tugla-2x4" with yon 0 covers x..x+3 and y..y+1; with yon 90 it covers x..x+1 and y..y+3.
+- The model stands on z = 0. Every other piece MUST sit directly on top of (or hang under) another piece,
+  overlapping it by at least one stud. Pieces must NOT overlap each other in space.
+- To connect two pieces side by side, put a piece on top that spans both (like real LEGO).
+- Keep the model inside a 14 x 14 stud area and at most 40 plates tall.
+- Example (a small step): a 2x4 brick at x=0,y=0,z=0,yon=0 and a 2x2 brick on top of its right half at x=2,y=0,z=3,yon=0.`;
+
 export async function modelOner(eldekiler: ParcaSatiri[], anahtar: string, model?: string): Promise<ModelOnerisi[]> {
-  const liste = eldekiler
+  const kullanilabilir = eldekiler.filter((s) => cizilebilir(s.parcaId));
+  const liste = kullanilabilir
     .map((s) => `${s.adet} x ${s.parcaId} (${parcaBul(s.parcaId).ipucu}) color ${s.renkId} (${renkBul(s.renkId).legoAdi})`)
     .join('\n');
 
-  const talimat = `You are a friendly LEGO master builder helping Ilgaz, a 7-year-old boy in Turkey.
+  const talimat = `You are a friendly LEGO master builder designing simple builds for Ilgaz, a 7-year-old boy in Turkey.
 Ilgaz has ONLY these loose LEGO pieces:
 ${liste}
 
-Suggest 4 different, fun, simple models Ilgaz can build using ONLY these pieces.
+Design 3 different, fun, recognizable models he can build with ONLY these pieces, with step-by-step building instructions.
 Rules:
-- Never use a part id + color combination Ilgaz does not have, and never use more than the available count.
-- Mix kinds: e.g. a vehicle, an animal, a building or furniture, and something surprising.
-- Each model should use between 6 and 40 pieces (fewer if the child has few pieces). Simple, sturdy, recognizable.
-- "ad": short Turkish name (2-4 words). "emoji": one emoji. "aciklama": one or two short, cheerful Turkish sentences Ilgaz (7) understands; you may address him by name.
+- Never use a part id + color combination Ilgaz does not have, and never use more pieces than available.
+- Mix kinds: e.g. a vehicle, an animal, a building or furniture, a robot or something surprising.
+- Each model uses 6 to 30 pieces (fewer if he has few pieces). Sturdy and easy: build from the bottom up.
+- Split the build into 3 to 10 steps ("adimlar"); each step adds 1 to 5 pieces, lower pieces first.
+- Use colors to make the model recognizable (e.g. black tyres-look, white windows, green leaves).
+- "ad": short Turkish name (2-4 words). "emoji": one emoji. "aciklama": one or two short, cheerful Turkish sentences Ilgaz understands; you may address him by name.
 - "zorluk": 1 (very easy), 2 (medium) or 3 (challenging).
-- "parcalar": the exact pieces the model uses, with the same ids as above.
+
+${KOORDINAT_ANLATIMI}
 
 ${KATALOGLAR}`;
 
   const ham = await geminiJson([{ text: talimat }], ONERI_SEMASI, anahtar, model);
+
   return (Array.isArray(ham?.modeller) ? ham.modeller : [])
     .filter((m: any) => m && typeof m.ad === 'string')
-    .slice(0, 6)
-    .map((m: any) => ({
-      ad: String(m.ad).slice(0, 60),
-      emoji: typeof m.emoji === 'string' && m.emoji ? [...m.emoji].slice(0, 2).join('') : '🧱',
-      aciklama: String(m.aciklama ?? '').slice(0, 300),
-      zorluk: Math.min(3, Math.max(1, Math.round(Number(m.zorluk) || 1))),
-      parcalar: (Array.isArray(m.parcalar) ? m.parcalar : []).map(satirTemizle).filter((s: { adet: number }) => s.adet > 0),
-    }));
+    .slice(0, 5)
+    .map((m: any) => {
+      // Eldeki adetleri aşan parçaları at (adım sırasına göre)
+      const kalan = new Map(kullanilabilir.map((s) => [`${s.parcaId}|${s.renkId}`, s.adet]));
+      const adimlar: Adim[] = (Array.isArray(m.adimlar) ? m.adimlar : []).map((a: any) => ({
+        parcalar: (Array.isArray(a?.parcalar) ? a.parcalar : [])
+          .map((p: any) => ({
+            parcaId: String(p?.parcaId),
+            renkId: String(p?.renkId),
+            x: Math.round(Number(p?.x)),
+            y: Math.round(Number(p?.y)),
+            z: Math.round(Number(p?.z)),
+            yon: Number(p?.yon) === 90 ? 90 : 0,
+          }))
+          .filter((p: YapiParcasi) => {
+            if (![p.x, p.y, p.z].every(Number.isFinite)) return false;
+            const k = `${p.parcaId}|${p.renkId}`;
+            const n = kalan.get(k) ?? 0;
+            if (n <= 0) return false;
+            kalan.set(k, n - 1);
+            return true;
+          }),
+      }));
+      const temiz = yapiyiDuzelt(adimlar);
+      return {
+        ad: String(m.ad).slice(0, 60),
+        emoji: typeof m.emoji === 'string' && m.emoji ? [...m.emoji].slice(0, 2).join('') : '🧱',
+        aciklama: String(m.aciklama ?? '').slice(0, 300),
+        zorluk: Math.min(3, Math.max(1, Math.round(Number(m.zorluk) || 1))),
+        adimlar: temiz,
+        parcalar: yapiParcalari(temiz),
+      };
+    })
+    .filter((m: ModelOnerisi) => m.parcalar.length > 0 && m.parcalar.reduce((t, p) => t + p.adet, 0) >= 3);
 }

@@ -10,13 +10,14 @@ interface Props {
   resim: string;
   isaretler: Isaret[];
   /** Verilirse sadece bu parçanın kutuları öne çıkar, diğerleri soluklaşır */
-  vurgu?: Vurgu | null;
+  vurgu?: Vurgu | Vurgu[] | null;
   /** Resmin en fazla yüksekliği (CSS değeri) */
   enFazlaYukseklik?: string;
   onClick?: () => void;
 }
 
-const eslesir = (i: Isaret, v?: Vurgu | null) => !!v && i.parcaId === v.parcaId && i.renkId === v.renkId;
+const eslesir = (i: Isaret, v?: Vurgu | Vurgu[] | null) =>
+  !!v && (Array.isArray(v) ? v : [v]).some((x) => i.parcaId === x.parcaId && i.renkId === x.renkId);
 
 /** Fotoğrafın üstüne, yapay zekanın bulduğu her parça için bir çerçeve çizer. */
 export function IsaretliFoto({ resim, isaretler, vurgu, enFazlaYukseklik = '46vh', onClick }: Props) {

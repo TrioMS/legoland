@@ -1,3 +1,5 @@
+import type { Adim } from './yapi';
+
 export type Guven = 'yuksek' | 'orta' | 'dusuk';
 
 export interface ParcaSatiri {
@@ -19,6 +21,8 @@ export interface ModelOnerisi {
   aciklama: string;
   zorluk: number;
   parcalar: ModelParcasi[];
+  /** Adım adım 3D yapı (eski kayıtlarda yok) */
+  adimlar?: Adim[];
 }
 
 export interface MocOnerisi {

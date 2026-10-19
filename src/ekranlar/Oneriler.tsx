@@ -3,6 +3,8 @@ import { parcaBul, renkBul } from '../../shared/katalog';
 import type { MocOnerisi, ModelOnerisi, ModelParcasi, ParcaSatiri } from '../../shared/tipler';
 import { AnalizHatasi, mocleriAl, modelOnerileriAl } from '../api/analiz';
 import { ParcaResmi } from '../bilesenler/ParcaResmi';
+import { IzometrikModel } from '../bilesenler/IzometrikModel';
+import { Talimat } from './Talimat';
 import type { Tarama } from '../depo/taramalar';
 import {
   legoTalimatLinki,
@@ -20,7 +22,11 @@ interface Props {
   kodGerekli: () => void;
 }
 
-type Secili = { tur: 'model'; model: ModelOnerisi } | { tur: 'set'; set: SetEslesmesi } | null;
+type Secili =
+  | { tur: 'model'; model: ModelOnerisi }
+  | { tur: 'talimat'; model: ModelOnerisi }
+  | { tur: 'set'; set: SetEslesmesi }
+  | null;
 
 const yildizlar = (n: number) => '★'.repeat(n) + '☆'.repeat(3 - n);
 
@@ -32,7 +38,19 @@ export function Oneriler({ tarama, onerileriKaydet, kodGerekli }: Props) {
     window.scrollTo(0, 0);
   }, [secili, sekme]);
 
-  if (secili?.tur === 'model') return <ModelDetay model={secili.model} eldekiler={tarama.parcalar} geri={() => setSecili(null)} />;
+  if (secili?.tur === 'talimat') {
+    return <Talimat model={secili.model} tarama={tarama} geri={() => setSecili({ tur: 'model', model: secili.model })} />;
+  }
+  if (secili?.tur === 'model') {
+    return (
+      <ModelDetay
+        model={secili.model}
+        eldekiler={tarama.parcalar}
+        yap={() => setSecili({ tur: 'talimat', model: secili.model })}
+        geri={() => setSecili(null)}
+      />
+    );
+  }
   if (secili?.tur === 'set') return <SetDetay set={secili.set} kodGerekli={kodGerekli} geri={() => setSecili(null)} />;
 
   return (
@@ -81,7 +99,9 @@ function Fikirler({
   };
 
   useEffect(() => {
-    if (!tarama.oneriler && tarama.parcalar.length > 0) getir();
+    // Eski kayıtlardaki fikirlerde 3D adımlar yok; onları da yenile
+    const eski = !tarama.oneriler || tarama.oneriler.every((m) => !m.adimlar?.length);
+    if (eski && tarama.parcalar.length > 0) getir();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -98,7 +118,7 @@ function Fikirler({
           return (
             <li key={i}>
               <button className="oneri-karti" onClick={() => sec(m)}>
-                <span className="oneri-gorsel">{m.emoji}</span>
+                <span className="oneri-gorsel"><ModelGorseli model={m} /></span>
                 <span className="oneri-adi">{m.ad}</span>
                 <span className="oneri-aciklama">{m.aciklama}</span>
                 <span className="oneri-alt">
@@ -139,24 +159,37 @@ function ParcaSatirlari({ satirlar, eksikler }: { satirlar: ModelParcasi[]; eksi
   );
 }
 
-function ModelDetay({ model, eldekiler, geri }: { model: ModelOnerisi; eldekiler: ParcaSatiri[]; geri: () => void }) {
+/** Modelin 3D resmi; adım bilgisi yoksa (eski kayıt) emoji */
+function ModelGorseli({ model, donus = 0 }: { model: ModelOnerisi; donus?: number }) {
+  const parcalar = model.adimlar?.flatMap((a) => a.parcalar) ?? [];
+  return parcalar.length ? <IzometrikModel parcalar={parcalar} donus={donus} /> : <>{model.emoji}</>;
+}
+
+function ModelDetay({ model, eldekiler, yap, geri }: { model: ModelOnerisi; eldekiler: ParcaSatiri[]; yap: () => void; geri: () => void }) {
   const k = parcalariKontrolEt(model.parcalar, eldekiler);
+  const [donus, setDonus] = useState(0);
+  const adimVar = !!model.adimlar?.length;
   return (
     <main className="ekran">
       <button className="geri-buton" onClick={geri}>⬅️ Fikirler</button>
       <section className="detay-baslik">
-        <span className="detay-gorsel">{model.emoji}</span>
+        <button className="detay-gorsel" onClick={() => setDonus((d) => d + 1)} aria-label="Modeli döndür">
+          <ModelGorseli model={model} donus={donus} />
+        </button>
         <div>
-          <h2 className="ekran-basligi">{model.ad}</h2>
+          <h2 className="ekran-basligi">{model.emoji} {model.ad}</h2>
           <p className="detay-aciklama">{model.aciklama}</p>
-          <p>{yildizlar(model.zorluk)} · {k.toplam} parça</p>
+          <p><span className="zorluk">{yildizlar(model.zorluk)}</span> · {k.toplam} parça{adimVar ? ` · ${model.adimlar!.length} adım` : ''}</p>
+          {adimVar && <p className="not-yazisi">👆 Resme dokun, modeli döndür.</p>}
         </div>
       </section>
+      <div className="yapiskan-eylem">
+        <button className="buyuk-buton turuncu" onClick={yap} disabled={!adimVar}>
+          <span className="buton-emoji">🔨</span> Bunu yapalım!
+        </button>
+      </div>
       <h3 className="alt-baslik-kucuk">Gereken parçalar</h3>
       <ParcaSatirlari satirlar={model.parcalar} eksikler={k.eksikler} />
-      <button className="buyuk-buton gri" disabled>
-        <span className="buton-emoji">📖</span> Adım adım yap <small>(yakında)</small>
-      </button>
     </main>
   );
 }
