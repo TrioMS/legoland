@@ -3,6 +3,7 @@ import type { Guven, HataYaniti, Isaret, Kutu, ParcaSatiri } from '../shared/tip
 
 // Güncel model listesi: https://ai.google.dev/gemini-api/docs/models
 const VARSAYILAN_MODEL = 'gemini-3.8-flash';
+const ISTEK_SURE_SINIRI_MS = 75_000;
 const YEDEK_MODEL = 'gemini-3.5-flash-lite';
 
 export class GeminiHatasi extends Error {
@@ -49,15 +50,23 @@ async function geminiJson(
   const modeller = [...new Set([model || VARSAYILAN_MODEL, YEDEK_MODEL])];
   let yanit!: Response;
   let veri: GeminiYaniti = {};
-  const iste = (m: string, ek: Record<string, unknown>) =>
-    fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-goog-api-key': anahtar },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts }],
-        generationConfig: { responseMimeType: 'application/json', responseSchema: sema, ...ek },
-      }),
-    });
+  const iste = async (m: string, ek: Record<string, unknown>) => {
+    try {
+      return await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': anahtar },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts }],
+          generationConfig: { responseMimeType: 'application/json', responseSchema: sema, ...ek },
+        }),
+        // Telefon 120 sn'de vazgeçiyor; ondan önce anlaşılır bir hata verelim
+        signal: AbortSignal.timeout(ISTEK_SURE_SINIRI_MS),
+      });
+    } catch (e) {
+      console.error('Gemini isteği zaman aşımı / ağ hatası', m, e);
+      throw new GeminiHatasi('Yapay zeka çok uzun düşündü. Biraz bekleyip tekrar dene.', 'sunucu', 504);
+    }
+  };
   for (const m of modeller) {
     yanit = await iste(m, ekAyarlar);
     veri = (await yanit.json().catch(() => ({}))) as GeminiYaniti;
@@ -190,11 +199,13 @@ const ortanca = (dizi: number[]) => {
 };
 
 /** Aynı fotoğrafı kaç kez bağımsız saydıracağımız; sonuçların ortancası alınır */
-const SAYIM_TEKRARI = 3;
+// Ücretsiz katmanda aynı anda birden çok istek çok yavaşlıyor (3 paralel istek 2 dakikayı aştı),
+// bu yüzden tek sayım yapılır. Tutarlılık için sabit tohum ve aynı fotoğraf önbelleği kullanılır.
+const SAYIM_TEKRARI = 1;
 
 /**
  * Yapay zeka aynı fotoğrafta her seferinde biraz farklı sayabiliyor. Bu yüzden fotoğraf
- * aynı anda 3 kez saydırılır ve her parça için ortanca adet alınır. Kutular, toplamı
+ * SAYIM_TEKRARI kez saydırılır ve her parça için ortanca adet alınır. Kutular, toplamı
  * ortancaya en yakın sayımdan gelir. Sayımlardan bazıları başarısız olursa kalanlarla devam edilir.
  */
 export async function parcalariTani(
