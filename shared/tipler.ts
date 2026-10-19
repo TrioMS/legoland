@@ -35,8 +35,19 @@ export interface AnalizIstegi {
   resim: string;
 }
 
+/** Fotoğraftaki bir parçanın yeri: [üst, sol, alt, sağ], 0-1000 arası (Gemini box_2d biçimi) */
+export type Kutu = [number, number, number, number];
+
+export interface Isaret {
+  parcaId: string;
+  renkId: string;
+  kutu: Kutu;
+}
+
 export interface AnalizYaniti {
   parcalar: ParcaSatiri[];
+  /** Her parçanın fotoğraftaki yeri */
+  isaretler?: Isaret[];
   /** Yapay zekanın çocuğa/ebeveyne kısa notu (ör. "bazı parçalar üst üste") */
   not?: string;
   sahte?: boolean;

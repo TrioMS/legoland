@@ -1,5 +1,5 @@
 import { PARCA_TURLERI, RENKLER, parcaBul, renkBul } from '../shared/katalog';
-import type { Guven, HataYaniti, ModelOnerisi, ParcaSatiri } from '../shared/tipler';
+import type { Guven, HataYaniti, Isaret, Kutu, ModelOnerisi, ParcaSatiri } from '../shared/tipler';
 
 // Güncel model listesi: https://ai.google.dev/gemini-api/docs/models
 const VARSAYILAN_MODEL = 'gemini-3.8-flash';
@@ -78,6 +78,14 @@ async function geminiJson(parts: unknown[], sema: unknown, anahtar: string, mode
   }
 }
 
+/** [ymin, xmin, ymax, xmax] 0-1000 aralığına sıkıştırılır; bozuk kutular atılır */
+function kutuTemizle(k: unknown): Kutu | null {
+  if (!Array.isArray(k) || k.length !== 4) return null;
+  const [y1, x1, y2, x2] = k.map((v) => Math.max(0, Math.min(1000, Math.round(Number(v)))));
+  if (![y1, x1, y2, x2].every(Number.isFinite) || y2 <= y1 || x2 <= x1) return null;
+  return [y1, x1, y2, x2];
+}
+
 const satirTemizle = (s: any) => ({
   parcaId: PARCA_IDLERI.includes(s?.parcaId) ? s.parcaId : 'diger',
   renkId: RENK_IDLERI.includes(s?.renkId) ? s.renkId : 'acik-gri',
@@ -95,6 +103,8 @@ Rules:
 - Pieces that are partly hidden still count if you can identify them.
 - Do NOT count the table, floor, box, baseplates used as background, or non-LEGO objects.
 - "guven" is your confidence for that row: "yuksek" (sure), "orta" (probably), "dusuk" (guess).
+- "kutular": for EVERY single piece in that row, give its bounding box as [ymin, xmin, ymax, xmax] normalized to 0-1000.
+  Exactly one box per piece, so "adet" must equal the number of boxes. Boxes should tightly fit each piece.
 - "not": one short, friendly sentence in Turkish for a 7-year-old boy named Ilgaz; you may address him by name (e.g. advice like spreading pieces apart if they overlap). Leave empty if nothing to say.
 
 ${KATALOGLAR}`;
@@ -106,9 +116,13 @@ const SAYMA_SEMASI = {
       type: 'ARRAY',
       items: {
         ...SATIR_SEMASI,
-        properties: { ...SATIR_SEMASI.properties, guven: { type: 'STRING', enum: GUVENLER } },
-        required: [...SATIR_SEMASI.required, 'guven'],
-        propertyOrdering: [...SATIR_SEMASI.propertyOrdering, 'guven'],
+        properties: {
+          ...SATIR_SEMASI.properties,
+          guven: { type: 'STRING', enum: GUVENLER },
+          kutular: { type: 'ARRAY', items: { type: 'ARRAY', items: { type: 'INTEGER' } } },
+        },
+        required: [...SATIR_SEMASI.required, 'guven', 'kutular'],
+        propertyOrdering: ['parcaId', 'renkId', 'kutular', 'adet', 'guven'],
       },
     },
     not: { type: 'STRING' },
@@ -121,20 +135,28 @@ export async function parcalariTani(
   resimBase64: string,
   anahtar: string,
   model?: string,
-): Promise<{ parcalar: ParcaSatiri[]; not?: string }> {
+): Promise<{ parcalar: ParcaSatiri[]; isaretler: Isaret[]; not?: string }> {
   const ham = await geminiJson(
     [{ inline_data: { mime_type: 'image/jpeg', data: resimBase64 } }, { text: SAYMA_TALIMATI }],
     SAYMA_SEMASI,
     anahtar,
     model,
   );
+  const isaretler: Isaret[] = [];
   const parcalar: ParcaSatiri[] = (Array.isArray(ham?.parcalar) ? ham.parcalar : [])
-    .map((s: any) => ({ ...satirTemizle(s), guven: GUVENLER.includes(s?.guven) ? s.guven : 'orta' }))
+    .map((s: any) => {
+      const satir = { ...satirTemizle(s), guven: GUVENLER.includes(s?.guven) ? s.guven : 'orta' } as ParcaSatiri;
+      const kutular = (Array.isArray(s?.kutular) ? s.kutular : []).map(kutuTemizle).filter(Boolean) as Kutu[];
+      for (const kutu of kutular) isaretler.push({ parcaId: satir.parcaId, renkId: satir.renkId, kutu });
+      // Her parça için bir kutu istendi; kutu sayısı daha güvenilir bir sayımdır
+      if (kutular.length > 0) satir.adet = kutular.length;
+      return satir;
+    })
     .filter((s: ParcaSatiri) => s.adet > 0);
   if (parcalar.length === 0 && !ham?.not) {
     throw new GeminiHatasi('Fotoğrafta parça bulunamadı. Daha yakından ve aydınlık bir yerde çekmeyi dene.', 'gecersiz', 422);
   }
-  return { parcalar, not: typeof ham?.not === 'string' && ham.not.trim() ? ham.not.trim() : undefined };
+  return { parcalar, isaretler, not: typeof ham?.not === 'string' && ham.not.trim() ? ham.not.trim() : undefined };
 }
 
 // ---- Eldeki parçalarla model önerisi ----------------------------------------------

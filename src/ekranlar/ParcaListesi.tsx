@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { PARCA_TURLERI, RENKLER, parcaBul, renkBul } from '../../shared/katalog';
 import type { ParcaSatiri } from '../../shared/tipler';
 import { ParcaResmi } from '../bilesenler/ParcaResmi';
+import { IsaretliFoto, type Vurgu } from '../bilesenler/IsaretliFoto';
 import { toplamAdet, type Tarama } from '../depo/taramalar';
 
 interface Props {
@@ -18,6 +19,12 @@ const renkSirasi = (id: string) => RENKLER.findIndex((r) => r.id === id);
 export function ParcaListesi({ tarama, guncelle, parcaEkle, fotoEkle, oneriler }: Props) {
   const [duzenle, setDuzenle] = useState(false);
   const [buyukResim, setBuyukResim] = useState(false);
+  const [vurgu, setVurgu] = useState<Vurgu | null>(null);
+  const [fotoNo, setFotoNo] = useState(0);
+
+  const fotolar = tarama.fotolar ?? [];
+  const foto = fotolar[Math.min(fotoNo, fotolar.length - 1)];
+  const vurguSayisi = vurgu && foto ? foto.isaretler.filter((i) => i.parcaId === vurgu.parcaId && i.renkId === vurgu.renkId).length : 0;
 
   const sirali = [...tarama.parcalar].sort(
     (a, b) => parcaSirasi(a.parcaId) - parcaSirasi(b.parcaId) || renkSirasi(a.renkId) - renkSirasi(b.renkId),
@@ -31,14 +38,38 @@ export function ParcaListesi({ tarama, guncelle, parcaEkle, fotoEkle, oneriler }
 
   return (
     <main className="ekran">
-      <button className="foto-baslik" onClick={() => setBuyukResim(true)} aria-label="Fotoğrafı büyüt">
-        <img src={tarama.resim} alt="" />
-        <div className="foto-baslik-yazi">
-          <div className="toplam-sayi">{toplam}</div>
-          <div className="toplam-yazi">parça buldum, Ilgaz!</div>
-          {(tarama.fotoSayisi ?? 1) > 1 && <div className="foto-sayisi">📷 {tarama.fotoSayisi} fotoğraftan</div>}
-        </div>
-      </button>
+      <section className="foto-sahnesi">
+        {foto ? (
+          <IsaretliFoto resim={foto.resim} isaretler={foto.isaretler} vurgu={vurgu} onClick={() => setBuyukResim(true)} />
+        ) : (
+          <img src={tarama.resim} alt="" className="eski-foto" onClick={() => setBuyukResim(true)} />
+        )}
+        {fotolar.length > 1 && (
+          <div className="foto-gecis">
+            {fotolar.map((_, i) => (
+              <button key={i} className={i === fotoNo ? 'aktif' : ''} onClick={() => setFotoNo(i)} aria-label={`${i + 1}. fotoğraf`} />
+            ))}
+          </div>
+        )}
+        {vurgu ? (
+          <div className="vurgu-cubugu">
+            <ParcaResmi parcaId={vurgu.parcaId} renkId={vurgu.renkId} boyut={44} />
+            <span>
+              <b>{parcaBul(vurgu.parcaId).ad}</b> · {renkBul(vurgu.renkId).ad}
+              <br />
+              {vurguSayisi > 0 ? `Fotoğrafta ${vurguSayisi} tane işaretledim` : 'Bu fotoğrafta işaret yok'}
+            </span>
+            <button onClick={() => setVurgu(null)} aria-label="Kapat">✕</button>
+          </div>
+        ) : (
+          <div className="foto-baslik-yazi">
+            <div className="toplam-sayi">{toplam}</div>
+            <div className="toplam-yazi">parça buldum, Ilgaz!</div>
+            {(tarama.fotoSayisi ?? 1) > 1 && <div className="foto-sayisi">📷 {tarama.fotoSayisi} fotoğraftan</div>}
+          </div>
+        )}
+      </section>
+      {foto && !vurgu && sirali.length > 0 && <p className="not-yazisi">👆 Bir parçaya dokun, fotoğrafta nerede olduğunu göstereyim.</p>}
 
       <div className="cip-satiri">
         <button className={`cip ${duzenle ? 'aktif' : ''}`} onClick={() => setDuzenle(!duzenle)}>
@@ -63,7 +94,15 @@ export function ParcaListesi({ tarama, guncelle, parcaEkle, fotoEkle, oneriler }
           const parca = parcaBul(satir.parcaId);
           const renk = renkBul(satir.renkId);
           return (
-            <li key={`${satir.parcaId}|${satir.renkId}`} className={`parca-karti guven-${satir.guven}`}>
+            <li
+              key={`${satir.parcaId}|${satir.renkId}`}
+              className={`parca-karti guven-${satir.guven} ${vurgu?.parcaId === satir.parcaId && vurgu?.renkId === satir.renkId ? 'vurgulanan' : ''}`}
+              onClick={() => {
+                if (duzenle || !foto) return;
+                setVurgu({ parcaId: satir.parcaId, renkId: satir.renkId });
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+            >
               <div className="adet-rozeti">{satir.adet}</div>
               <ParcaResmi parcaId={satir.parcaId} renkId={satir.renkId} boyut={84} />
               <div className="parca-adi">{parca.ad}</div>
@@ -92,7 +131,11 @@ export function ParcaListesi({ tarama, guncelle, parcaEkle, fotoEkle, oneriler }
 
       {buyukResim && (
         <div className="tam-ekran" onClick={() => setBuyukResim(false)}>
-          <img src={tarama.resim} alt="Fotoğraf" />
+          {foto ? (
+            <IsaretliFoto resim={foto.resim} isaretler={foto.isaretler} vurgu={vurgu} enFazlaYukseklik="92dvh" />
+          ) : (
+            <img src={tarama.resim} alt="Fotoğraf" />
+          )}
         </div>
       )}
     </main>

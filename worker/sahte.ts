@@ -1,4 +1,4 @@
-import type { AnalizYaniti, ModelOnerisi } from '../shared/tipler';
+import type { AnalizYaniti, Isaret, ModelOnerisi, ParcaSatiri } from '../shared/tipler';
 
 export const sahteOneriler = (): ModelOnerisi[] => [
   {
@@ -53,3 +53,21 @@ export const sahteYanit = (): AnalizYaniti => ({
     { parcaId: 'karo-1x2', renkId: 'acik-gri', adet: 2, guven: 'dusuk' },
   ],
 });
+
+/** Deneme modu için parçaları fotoğrafa ızgara gibi yerleştiren sahte kutular */
+export function sahteIsaretler(parcalar: ParcaSatiri[]): Isaret[] {
+  const isaretler: Isaret[] = [];
+  const toplam = parcalar.reduce((t, p) => t + p.adet, 0);
+  const sutun = Math.ceil(Math.sqrt(toplam * 1.4));
+  let i = 0;
+  for (const p of parcalar) {
+    for (let n = 0; n < p.adet; n++, i++) {
+      const x = (i % sutun) * (1000 / sutun);
+      const y = Math.floor(i / sutun) * (1000 / Math.ceil(toplam / sutun));
+      const g = 1000 / sutun;
+      const h = 1000 / Math.ceil(toplam / sutun);
+      isaretler.push({ parcaId: p.parcaId, renkId: p.renkId, kutu: [Math.round(y + h * 0.15), Math.round(x + g * 0.1), Math.round(y + h * 0.85), Math.round(x + g * 0.9)] });
+    }
+  }
+  return isaretler;
+}

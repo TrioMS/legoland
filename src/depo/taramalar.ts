@@ -1,5 +1,5 @@
 import { createStore, del, get, set, values } from 'idb-keyval';
-import type { ModelOnerisi, ParcaSatiri } from '../../shared/tipler';
+import type { Isaret, ModelOnerisi, ParcaSatiri } from '../../shared/tipler';
 
 export interface Tarama {
   id: string;
@@ -11,6 +11,8 @@ export interface Tarama {
   sahte?: boolean;
   /** Kaç fotoğraftan birleştirildi */
   fotoSayisi?: number;
+  /** Büyük fotoğraflar ve üzerlerindeki parça işaretleri (eski kayıtlarda yok) */
+  fotolar?: { resim: string; isaretler: Isaret[] }[];
   /** Yapay zekanın son model önerileri; parçalar değişince silinir */
   oneriler?: ModelOnerisi[];
 }

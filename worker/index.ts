@@ -3,7 +3,7 @@ import type { AnalizIstegi, AnalizYaniti, HataYaniti, MocOnerisi, ModelOnerisi, 
 import { birlestir } from '../shared/tipler';
 import { parcalariTani, modelOner, GeminiHatasi } from './gemini';
 import { setAlternatifleri } from './rebrickable';
-import { sahteOneriler, sahteYanit } from './sahte';
+import { sahteIsaretler, sahteOneriler, sahteYanit } from './sahte';
 
 export interface Env {
   GEMINI_API_KEY?: string;
@@ -56,7 +56,8 @@ app.post('/api/analiz', async (c) => {
 
   if (c.env.SAHTE_MOD === '1') {
     await new Promise((r) => setTimeout(r, 1500));
-    return c.json<AnalizYaniti>(sahteYanit());
+    const sahte = sahteYanit();
+    return c.json<AnalizYaniti>({ ...sahte, isaretler: sahteIsaretler(sahte.parcalar) });
   }
   if (!c.env.GEMINI_API_KEY) {
     return c.json(hata('Yapay zeka anahtarı ayarlanmamış (GEMINI_API_KEY).', 'anahtar'), 500);
@@ -64,7 +65,7 @@ app.post('/api/analiz', async (c) => {
 
   try {
     const sonuc = await parcalariTani(govde.resim, c.env.GEMINI_API_KEY, c.env.GEMINI_MODEL);
-    return c.json<AnalizYaniti>({ parcalar: birlestir(sonuc.parcalar), not: sonuc.not });
+    return c.json<AnalizYaniti>({ parcalar: birlestir(sonuc.parcalar), isaretler: sonuc.isaretler, not: sonuc.not });
   } catch (e) {
     return geminiHatasiniYanitla(c, e);
   }

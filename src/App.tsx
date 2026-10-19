@@ -83,12 +83,14 @@ export default function App() {
     setEkran('bekleme');
     try {
       const sonuc = await analizEt(foto);
+      const yeniFoto = { resim: await kucult(await (await fetch(foto)).blob(), 1000, 0.8), isaretler: sonuc.isaretler ?? [] };
       if (ekleme && aktif) {
         taramayiDegistir({
           ...aktif,
           parcalar: birlestir([...aktif.parcalar, ...sonuc.parcalar]),
           not: sonuc.not ?? aktif.not,
           fotoSayisi: (aktif.fotoSayisi ?? 1) + 1,
+          fotolar: [...(aktif.fotolar ?? []), yeniFoto],
           oneriler: undefined,
         });
       } else {
@@ -100,6 +102,7 @@ export default function App() {
           not: sonuc.not,
           sahte: sonuc.sahte,
           fotoSayisi: 1,
+          fotolar: [yeniFoto],
         };
         await taramaKaydet(tarama);
         setAktif(tarama);
