@@ -45,7 +45,10 @@ export function AnaSayfa({ hata, fotoSecildi }: { hata: string | null; fotoSecil
   return (
     <main className="ekran ana">
       <header className="karsilama">
-        <img src="/favicon.svg" alt="" className="logo" />
+        <figure className="kaplumbaga">
+          <img src="/kaplumbaga.png" alt="Kaplumbağa baba ve yavrusu" />
+          <figcaption>Babacım seni çok seviyorum ❤️</figcaption>
+        </figure>
         <div>
           <p className="selam">Merhaba Ilgaz 👋</p>
           <h1>Bugün ne yapalım?</h1>
