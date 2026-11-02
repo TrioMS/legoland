@@ -479,3 +479,4 @@ button.detay-gorsel { border: none; padding: 0; cursor: pointer; }
   max-width: 160px;
   line-height: 1.2;
 }
+.bekleme-sure { margin: 0; opacity: 0.6; font-size: 1rem; font-variant-numeric: tabular-nums; }

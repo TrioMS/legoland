@@ -31,6 +31,8 @@ export default function App() {
   const [aktif, setAktif] = useState<Tarama | null>(null);
   const [foto, setFoto] = useState<string | null>(null);
   const [hata, setHata] = useState<string | null>(null);
+  /** Yapay zeka takıldı ve otomatik olarak yeniden deneniyor */
+  const [yenidenDeneniyor, setYenidenDeneniyor] = useState(false);
   /** true ise yeni fotoğrafın parçaları aktif listeye eklenir */
   const [ekleme, setEkleme] = useState(false);
   /** Aile kodu girildikten sonra dönülecek ekran */
@@ -80,9 +82,19 @@ export default function App() {
   const analizBaslat = async () => {
     if (!foto) return;
     setHata(null);
+    setYenidenDeneniyor(false);
     setEkran('bekleme');
     try {
-      const sonuc = await analizEt(foto);
+      let sonuc;
+      try {
+        sonuc = await analizEt(foto);
+      } catch (e) {
+        // Yapay zeka takıldıysa (sunucu hatası / zaman aşımı) çocuğa düğmeye bastırmadan bir kez daha dene
+        const tekrarDenenebilir = e instanceof AnalizHatasi && (e.kod === 'sunucu' || e.kod === undefined) && e.message !== 'İnternet yok gibi görünüyor.';
+        if (!tekrarDenenebilir) throw e;
+        setYenidenDeneniyor(true);
+        sonuc = await analizEt(foto);
+      }
       const yeniFoto = { resim: await kucult(await (await fetch(foto)).blob(), 1000, 0.8), isaretler: sonuc.isaretler ?? [] };
       if (ekleme && aktif) {
         taramayiDegistir({
@@ -149,7 +161,7 @@ export default function App() {
         />
       );
     case 'bekleme':
-      return <Bekleme foto={foto} />;
+      return <Bekleme foto={foto} yenidenDeneniyor={yenidenDeneniyor} />;
     case 'liste':
       return aktif ? (
         <ParcaListesi

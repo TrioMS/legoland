@@ -6,7 +6,9 @@ const VARSAYILAN_MODEL = 'gemini-3.8-flash';
 // Telefon 120 sn'de vazgeçiyor: tüm denemeler 100 sn'ye sığmalı. Ana model süre dolarsa zayıf
 // yedek modele geçilmez (yedek çok az parça buluyor); sadece hata/kota durumunda yedeğe geçilir.
 const TOPLAM_SURE_SINIRI_MS = 100_000;
-const ANA_MODEL_SURE_MS = 95_000;
+// Ana model ilk denemede en fazla 50 sn bekler; takılırsa kalan süreyle bir kez daha denenir
+const ANA_MODEL_SURE_MS = 50_000;
+const YENIDEN_DENEME_ALT_SINIR_MS = 25_000;
 const YEDEK_MODEL = 'gemini-3.5-flash-lite';
 
 export class GeminiHatasi extends Error {
@@ -87,6 +89,11 @@ async function geminiJson(
     if (sonuc && sonuc.y.status === 400 && Object.keys(ekAyarlar).length && !/API key/i.test(sonuc.v.error?.message ?? '')) {
       console.error('Gemini ek ayarları reddetti, ayarsız deneniyor', m, sonuc.v.error?.message);
       sonuc = await iste(m, {}, Math.min(sure, kalanSure()));
+    }
+    // Gemini bazen takılıyor; takılan istek yeniden gönderilince çoğu zaman hızla cevap geliyor
+    if (!sonuc && kalanSure() > YENIDEN_DENEME_ALT_SINIR_MS) {
+      console.log('Ana model takıldı, yeniden deneniyor', m, `${kalanSure()} ms kaldı`);
+      sonuc = await iste(m, ekAyarlar, kalanSure());
     }
     if (!sonuc) {
       zamanAsimi = true;
