@@ -1,15 +1,15 @@
 import { PARCA_TURLERI, RENKLER, parcaBul, renkBul } from '../shared/katalog';
 import type { Guven, HataYaniti, Isaret, Kutu, ParcaSatiri } from '../shared/tipler';
 
-// Güncel model listesi: https://ai.google.dev/gemini-api/docs/models
+// Güncel model listesi: https://ai.google.dev/gemini-api/docs/models (ikisi de ücretsiz katmanda)
 const VARSAYILAN_MODEL = 'gemini-3.8-flash';
-// Telefon 120 sn'de vazgeçiyor: tüm denemeler 100 sn'ye sığmalı. Ana model süre dolarsa zayıf
-// yedek modele geçilmez (yedek çok az parça buluyor); sadece hata/kota durumunda yedeğe geçilir.
+// Ana model ücretsiz katmanda sık sık "high demand" (503) veriyor ya da 95 sn'yi aşıyordu.
+// Bu durumda bir önceki nesil Flash'a geçilir. Flash-Lite kullanılmaz: çok az parça buluyor.
+const YEDEK_MODEL = 'gemini-3.6-flash';
+// Telefon 120 sn'de vazgeçiyor: tüm denemeler 100 sn'ye sığmalı.
 const TOPLAM_SURE_SINIRI_MS = 100_000;
-// Ana model ilk denemede en fazla 50 sn bekler; takılırsa kalan süreyle bir kez daha denenir
-const ANA_MODEL_SURE_MS = 50_000;
-const YENIDEN_DENEME_ALT_SINIR_MS = 25_000;
-const YEDEK_MODEL = 'gemini-3.5-flash-lite';
+// Ana model en fazla 40 sn bekler; cevap gelmezse kalan süre yedek modele kalır
+const ANA_MODEL_SURE_MS = 40_000;
 
 export class GeminiHatasi extends Error {
   constructor(message: string, public kod: HataYaniti['kod'], public durum: number) {
@@ -90,14 +90,10 @@ async function geminiJson(
       console.error('Gemini ek ayarları reddetti, ayarsız deneniyor', m, sonuc.v.error?.message);
       sonuc = await iste(m, {}, Math.min(sure, kalanSure()));
     }
-    // Gemini bazen takılıyor; takılan istek yeniden gönderilince çoğu zaman hızla cevap geliyor
-    if (!sonuc && kalanSure() > YENIDEN_DENEME_ALT_SINIR_MS) {
-      console.log('Ana model takıldı, yeniden deneniyor', m, `${kalanSure()} ms kaldı`);
-      sonuc = await iste(m, ekAyarlar, kalanSure());
-    }
     if (!sonuc) {
       zamanAsimi = true;
-      break; // süre doldu: zayıf yedek modelle yanlış sayım vermektense hata göster
+      console.log('Model takıldı, sıradakine geçiliyor', m, `${kalanSure()} ms kaldı`);
+      continue; // süre doldu: yedek modeli kalan süreyle dene
     }
     yanit = sonuc.y;
     veri = sonuc.v;
