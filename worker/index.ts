@@ -15,7 +15,7 @@ export interface Env {
 
 const app = new Hono<{ Bindings: Env }>();
 
-const SAYIM_SURUMU = 'v9-bolge';
+const SAYIM_SURUMU = 'v10-hizli';
 
 const hata = (mesaj: string, kod: HataYaniti['kod']): HataYaniti => ({ hata: mesaj, kod });
 

@@ -8,8 +8,11 @@ const VARSAYILAN_MODEL = 'gemini-3.8-flash';
 const YEDEK_MODEL = 'gemini-3.6-flash';
 // Telefon 120 sn'de vazgeçiyor: tüm denemeler 100 sn'ye sığmalı.
 const TOPLAM_SURE_SINIRI_MS = 100_000;
-// Ana model en fazla 40 sn bekler; cevap gelmezse kalan süre yedek modele kalır
-const ANA_MODEL_SURE_MS = 40_000;
+// İlk model en fazla 55 sn bekler; cevap gelmezse kalan süre sıradaki modele kalır
+const ANA_MODEL_SURE_MS = 55_000;
+// Yakın çekimlerle sayımda 3.6 Flash önce: Kasım 2026'da 3.8 Flash sık sık 503 "high demand" verdi ya da
+// zaman aşımına düştü; 3.6 Flash her seferinde 6-44 sn'de cevap verdi.
+const SAYIM_MODELLERI = ['gemini-3.6-flash', 'gemini-3.8-flash'];
 
 export class GeminiHatasi extends Error {
   constructor(message: string, public kod: HataYaniti['kod'], public durum: number) {
@@ -49,11 +52,12 @@ async function geminiJson(
   parts: unknown[],
   sema: unknown,
   anahtar: string,
-  model?: string,
+  /** Tek model adı (GEMINI_MODEL) ya da denenecek modellerin sırası */
+  model?: string | string[],
   /** İsteğe bağlı ayarlar (ör. yüksek görüntü çözünürlüğü); model kabul etmezse bunlarsız tekrar denenir */
   ekAyarlar: Record<string, unknown> = {},
 ): Promise<any> {
-  const modeller = [...new Set([model || VARSAYILAN_MODEL, YEDEK_MODEL])];
+  const modeller = Array.isArray(model) ? model : [...new Set([model || VARSAYILAN_MODEL, YEDEK_MODEL])];
   const baslangic = Date.now();
   const kalanSure = () => TOPLAM_SURE_SINIRI_MS - (Date.now() - baslangic);
   let yanit: Response | null = null;
@@ -107,7 +111,7 @@ async function geminiJson(
   }
 
   if (!yanit?.ok && zamanAsimi && (!yanit || yanit.status !== 429)) {
-    throw new GeminiHatasi('Yapay zeka şu an çok yavaş. Biraz bekleyip tekrar dene.', 'sunucu', 504);
+    throw new GeminiHatasi('Yapay zeka şu an çok yoğun. Birkaç dakika sonra tekrar dene.', 'yavas', 504);
   }
   if (!yanit) throw new GeminiHatasi('Yapay zeka şu an cevap vermedi. Tekrar dene.', 'sunucu', 502);
   if (!yanit.ok) {
@@ -204,8 +208,11 @@ interface Sayim {
 const BOLGE_TALIMATI = (n: number) => `You are an expert LEGO piece counter. The ${n} images are zoomed-in, overlapping parts
 (quarters) of ONE photo of loose LEGO pieces. For EACH image separately, list EVERY individual LEGO piece visible in it.
 
+Output format (short keys to keep the answer small): "g" = list of images; each has "i" = image number (1-${n})
+and "p" = list of pieces; each piece has "t" = part id, "r" = color id, "c" = confidence, "k" = box.
+
 Rules:
-- One entry = one physical piece, with ONE tight bounding box "kutu" = [ymin, xmin, ymax, xmax] in THAT image's own
+- One entry = one physical piece, with ONE tight bounding box "k" = [ymin, xmin, ymax, xmax] in THAT image's own
   coordinates, normalized to 0-1000. Never put two pieces in one box.
 - Pieces that touch each other are still separate pieces. Look at seams, gaps, outlines and stud counts:
   two 2x2 bricks side by side are TWO entries (not one 2x4); a stack of 3 plates is THREE entries.
@@ -215,44 +222,45 @@ Rules:
   systematically, region by region, and do not stop early. There may be many pieces.
 - Determine size by counting studs. A brick is tall (about 3 plates high); a plate is thin; a tile is thin and smooth.
 - Use ONLY the part ids and color ids from the catalogs below. If a piece does not fit any part id, use "diger".
-- "goruntu" is the image number (1-${n}). "guven": "yuksek" (sure), "orta" (probably), "dusuk" (guess).
+- "c": "yuksek" (sure), "orta" (probably), "dusuk" (guess).
 - "not": one short, friendly sentence in Turkish for a 7-year-old boy named Ilgaz (e.g. advice like spreading pieces apart
   if they overlap). Leave empty if nothing to say.
 
 ${KATALOGLAR}`;
 
+// Kısa anahtarlar: her parça için tekrar eden alan adları cevabı (ve süreyi) ciddi uzatıyordu
 const BOLGE_SEMASI = {
   type: 'OBJECT',
   properties: {
-    goruntuler: {
+    g: {
       type: 'ARRAY',
       items: {
         type: 'OBJECT',
         properties: {
-          goruntu: { type: 'INTEGER' },
-          parcalar: {
+          i: { type: 'INTEGER' },
+          p: {
             type: 'ARRAY',
             items: {
               type: 'OBJECT',
               properties: {
-                parcaId: { type: 'STRING', enum: PARCA_IDLERI },
-                renkId: { type: 'STRING', enum: RENK_IDLERI },
-                guven: { type: 'STRING', enum: GUVENLER },
-                kutu: { type: 'ARRAY', items: { type: 'INTEGER' } },
+                t: { type: 'STRING', enum: PARCA_IDLERI },
+                r: { type: 'STRING', enum: RENK_IDLERI },
+                c: { type: 'STRING', enum: GUVENLER },
+                k: { type: 'ARRAY', items: { type: 'INTEGER' } },
               },
-              required: ['parcaId', 'renkId', 'guven', 'kutu'],
-              propertyOrdering: ['parcaId', 'renkId', 'guven', 'kutu'],
+              required: ['t', 'r', 'c', 'k'],
+              propertyOrdering: ['t', 'r', 'c', 'k'],
             },
           },
         },
-        required: ['goruntu', 'parcalar'],
-        propertyOrdering: ['goruntu', 'parcalar'],
+        required: ['i', 'p'],
+        propertyOrdering: ['i', 'p'],
       },
     },
     not: { type: 'STRING' },
   },
-  required: ['goruntuler'],
-  propertyOrdering: ['goruntuler', 'not'],
+  required: ['g'],
+  propertyOrdering: ['g', 'not'],
 };
 
 interface BolgeKutusu {
@@ -303,24 +311,29 @@ export function bolgeKutulariniBirlestir(kutular: BolgeKutusu[]): BolgeKutusu[] 
 async function bolgeSayimi(yakinlar: { resim: string; bolge: Kutu }[], anahtar: string, model: string | undefined): Promise<Sayim> {
   const parts: unknown[] = yakinlar.map((y) => ({ inline_data: { mime_type: 'image/jpeg', data: y.resim } }));
   parts.push({ text: BOLGE_TALIMATI(yakinlar.length) });
-  const ham = await geminiJson(parts, BOLGE_SEMASI, anahtar, model, { mediaResolution: 'MEDIA_RESOLUTION_HIGH' });
+  // Yakın çekimler zaten yakınlaştırılmış: orta ayrıntı yeter. Parça listelemek derin düşünme istemiyor.
+  // (Model bu ayarları kabul etmezse geminiJson ayarsız tekrar dener.)
+  const ham = await geminiJson(parts, BOLGE_SEMASI, anahtar, model ?? SAYIM_MODELLERI, {
+    mediaResolution: 'MEDIA_RESOLUTION_MEDIUM',
+    thinkingConfig: { thinkingLevel: 'low' },
+  });
 
   const tumu: BolgeKutusu[] = [];
-  for (const g of Array.isArray(ham?.goruntuler) ? ham.goruntuler : []) {
-    const i = Math.round(Number(g?.goruntu)) - 1;
+  for (const g of Array.isArray(ham?.g) ? ham.g : []) {
+    const i = Math.round(Number(g?.i)) - 1;
     const bolge = yakinlar[i]?.bolge;
     if (!bolge) continue;
     const [by1, bx1, by2, bx2] = bolge;
     const h = by2 - by1;
     const w = bx2 - bx1;
-    for (const p of Array.isArray(g?.parcalar) ? g.parcalar : []) {
-      const yerel = kutuTemizle(p?.kutu);
+    for (const p of Array.isArray(g?.p) ? g.p : []) {
+      const yerel = kutuTemizle(p?.k);
       if (!yerel) continue;
-      const satir = satirTemizle({ ...p, adet: 1 });
+      const satir = satirTemizle({ parcaId: p?.t, renkId: p?.r, adet: 1 });
       tumu.push({
         parcaId: satir.parcaId,
         renkId: satir.renkId,
-        guven: GUVENLER.includes(p?.guven) ? p.guven : 'orta',
+        guven: GUVENLER.includes(p?.c) ? p.c : 'orta',
         bolge: i,
         kutu: [
           Math.round(by1 + (yerel[0] * h) / 1000),

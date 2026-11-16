@@ -61,7 +61,8 @@ export interface AnalizYaniti {
 
 export interface HataYaniti {
   hata: string;
-  kod?: 'erisim' | 'kota' | 'anahtar' | 'gecersiz' | 'sunucu';
+  /** yavas: modeller süre sınırında cevap vermedi (uygulama tekrar denemez) */
+  kod?: 'erisim' | 'kota' | 'anahtar' | 'gecersiz' | 'sunucu' | 'yavas';
 }
 
 /** Aynı tür+renk satırlarını birleştirir, adedi 0 olanları atar. */

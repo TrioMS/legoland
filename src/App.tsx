@@ -95,7 +95,8 @@ export default function App() {
         sonuc = await analizEt(foto, yakinlar);
       } catch (e) {
         // Yapay zeka takıldıysa (sunucu hatası / zaman aşımı) çocuğa düğmeye bastırmadan bir kez daha dene
-        const tekrarDenenebilir = e instanceof AnalizHatasi && (e.kod === 'sunucu' || e.kod === undefined) && e.message !== 'İnternet yok gibi görünüyor.';
+        // Sadece kısa süren sunucu hatalarında tekrar dene; zaman aşımında (yavas / bağlantı çok uzun) tekrar 100 sn bekletme
+        const tekrarDenenebilir = e instanceof AnalizHatasi && e.kod === 'sunucu';
         if (!tekrarDenenebilir) throw e;
         setYenidenDeneniyor(true);
         sonuc = await analizEt(foto, yakinlar);
