@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { birlestir, type ParcaSatiri } from '../shared/tipler';
-import { AnalizHatasi, analizEt, kucult } from './api/analiz';
+import { AnalizHatasi, analizEt, kucult, yakinCekimler } from './api/analiz';
 import { taramaGetir, taramaKaydet, taramalariListele, type Tarama } from './depo/taramalar';
 import { AltMenu } from './bilesenler/AltMenu';
 import { AnaSayfa } from './ekranlar/AnaSayfa';
@@ -30,6 +30,8 @@ export default function App() {
   const [ekran, setEkran] = useState<Ekran>('ana');
   const [aktif, setAktif] = useState<Tarama | null>(null);
   const [foto, setFoto] = useState<string | null>(null);
+  /** Seçilen fotoğrafın orijinali (yakın çekimler tam çözünürlükten kesilsin diye) */
+  const fotoDosyasi = useRef<Blob | null>(null);
   const [hata, setHata] = useState<string | null>(null);
   /** Yapay zeka takıldı ve otomatik olarak yeniden deneniyor */
   const [yenidenDeneniyor, setYenidenDeneniyor] = useState(false);
@@ -73,6 +75,7 @@ export default function App() {
     setHata(null);
     try {
       setFoto(await kucult(dosya, 1600));
+      fotoDosyasi.current = dosya;
       setEkran('onizleme');
     } catch {
       setHata('Bu fotoğraf açılamadı. Başka bir tane dene.');
@@ -85,15 +88,17 @@ export default function App() {
     setYenidenDeneniyor(false);
     setEkran('bekleme');
     try {
+      // Küçük parçalar için orijinal fotoğraftan 4 yakın çekim; hazırlanamazsa onlarsız devam et
+      const yakinlar = await yakinCekimler(fotoDosyasi.current ?? (await (await fetch(foto)).blob())).catch(() => []);
       let sonuc;
       try {
-        sonuc = await analizEt(foto);
+        sonuc = await analizEt(foto, yakinlar);
       } catch (e) {
         // Yapay zeka takıldıysa (sunucu hatası / zaman aşımı) çocuğa düğmeye bastırmadan bir kez daha dene
         const tekrarDenenebilir = e instanceof AnalizHatasi && (e.kod === 'sunucu' || e.kod === undefined) && e.message !== 'İnternet yok gibi görünüyor.';
         if (!tekrarDenenebilir) throw e;
         setYenidenDeneniyor(true);
-        sonuc = await analizEt(foto);
+        sonuc = await analizEt(foto, yakinlar);
       }
       const yeniFoto = { resim: await kucult(await (await fetch(foto)).blob(), 1000, 0.8), isaretler: sonuc.isaretler ?? [] };
       if (ekleme && aktif) {

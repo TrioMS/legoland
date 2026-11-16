@@ -1,4 +1,4 @@
-import type { AnalizYaniti, HataYaniti, MocOnerisi } from '../../shared/tipler';
+import type { AnalizYaniti, HataYaniti, Kutu, MocOnerisi } from '../../shared/tipler';
 
 const KOD_ANAHTARI = 'lego-erisim-kodu';
 
@@ -50,8 +50,39 @@ async function apiIstegi<T>(yol: string, govde?: unknown): Promise<T> {
   return veri as T;
 }
 
-export const analizEt = (resimDataUrl: string) =>
-  apiIstegi<AnalizYaniti>('/api/analiz', { resim: resimDataUrl.split(',')[1] });
+/** Fotoğrafın birbirine biraz binen 4 çeyreği [üst, sol, alt, sağ] (0-1000) */
+export const YAKIN_BOLGELER: Kutu[] = [
+  [0, 0, 550, 550],
+  [0, 450, 550, 1000],
+  [450, 0, 1000, 550],
+  [450, 450, 1000, 1000],
+];
+
+/**
+ * Büyük parçaların yanında küçükler gözden kaçmasın diye fotoğrafın 4 çeyreğini ayrı ayrı,
+ * orijinal çözünürlükten keserek yakın çekim gibi hazırlar.
+ */
+export async function yakinCekimler(dosya: Blob, enUzunKenar = 1280): Promise<{ resim: string; bolge: Kutu }[]> {
+  const bitmap = await createImageBitmap(dosya, { imageOrientation: 'from-image' });
+  const sonuc = YAKIN_BOLGELER.map((bolge) => {
+    const [y1, x1, y2, x2] = bolge;
+    const sx = (x1 / 1000) * bitmap.width;
+    const sy = (y1 / 1000) * bitmap.height;
+    const sw = ((x2 - x1) / 1000) * bitmap.width;
+    const sh = ((y2 - y1) / 1000) * bitmap.height;
+    const oran = Math.min(1, enUzunKenar / Math.max(sw, sh));
+    const tuval = document.createElement('canvas');
+    tuval.width = Math.round(sw * oran);
+    tuval.height = Math.round(sh * oran);
+    tuval.getContext('2d')!.drawImage(bitmap, sx, sy, sw, sh, 0, 0, tuval.width, tuval.height);
+    return { resim: tuval.toDataURL('image/jpeg', 0.85).split(',')[1], bolge };
+  });
+  bitmap.close();
+  return sonuc;
+}
+
+export const analizEt = (resimDataUrl: string, yakinlar: { resim: string; bolge: Kutu }[] = []) =>
+  apiIstegi<AnalizYaniti>('/api/analiz', { resim: resimDataUrl.split(',')[1], yakinlar });
 
 
 export const mocleriAl = (setNo: string) =>

@@ -92,15 +92,54 @@ function FikirKarti({ o, sec }: { o: KutuphaneOnerisi; sec: (m: ModelOnerisi) =>
   );
 }
 
+/** Tohumlu karıştırma: aynı tohum aynı sırayı verir */
+function karistir<T>(dizi: T[], tohum: number): T[] {
+  let s = tohum >>> 0;
+  const rastgele = () => {
+    s = (s + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const kopya = [...dizi];
+  for (let i = kopya.length - 1; i > 0; i--) {
+    const j = Math.floor(rastgele() * (i + 1));
+    [kopya[i], kopya[j]] = [kopya[j], kopya[i]];
+  }
+  return kopya;
+}
+
+/** Bir grupta aynı anda gösterilecek en fazla fikir; "Başka fikirler" diğerlerini getirir */
+const GRUPTA_EN_FAZLA = 6;
+
 function Fikirler({ tarama, sec }: { tarama: Tarama; sec: (m: ModelOnerisi) => void }) {
   const [hepsi, setHepsi] = useState(false);
+  // Her açılışta farklı sıra; "Başka fikirler" bir sonraki sayfaya geçer
+  const [tohum] = useState(() => Math.floor(Math.random() * 1e9));
+  const [sayfa, setSayfa] = useState(0);
   const oneriler = useMemo(() => kutuphaneOnerileri(tarama.parcalar), [tarama.parcalar]);
 
   if (tarama.parcalar.length === 0) return <p className="bilgi-kutusu">Önce parça listesine birkaç parça eklemelisin.</p>;
 
-  const hazir = oneriler.filter((o) => o.oran === 1);
-  const yakin = oneriler.filter((o) => o.oran < 1 && o.oran >= 0.6);
-  const diger = oneriler.filter((o) => o.oran < 0.6);
+  // Uyumu yakın olanlar (aynı %20'lik dilim) kendi aralarında karıştırılır; daha uygun olan yine önde kalır
+  const dilim = (o: KutuphaneOnerisi) => Math.floor(o.oran * 5);
+  const dilimle = (liste: KutuphaneOnerisi[]) =>
+    [...new Set(liste.map(dilim))]
+      .sort((a, b) => b - a)
+      .flatMap((d, i) => karistir(liste.filter((o) => dilim(o) === d), tohum + i));
+  /** Listeyi sayfa sayfa döndürür: her basışta sıradaki GRUPTA_EN_FAZLA kadarını gösterir */
+  const sayfala = (liste: KutuphaneOnerisi[]) => {
+    if (liste.length <= GRUPTA_EN_FAZLA) return karistir(liste, tohum + sayfa);
+    const bas = (sayfa * GRUPTA_EN_FAZLA) % liste.length;
+    return [...liste, ...liste].slice(bas, bas + GRUPTA_EN_FAZLA);
+  };
+  const hazirTumu = karistir(oneriler.filter((o) => o.oran === 1), tohum);
+  const yakinTumu = dilimle(oneriler.filter((o) => o.oran < 1 && o.oran >= 0.6));
+  const hazir = sayfala(hazirTumu);
+  const yakin = sayfala(yakinTumu);
+  const gosterilen = new Set([...hazir, ...yakin]);
+  const diger = oneriler.filter((o) => !gosterilen.has(o));
+  const dahaFazlaVar = hazirTumu.length + yakinTumu.length > 1;
 
   return (
     <>
@@ -117,6 +156,17 @@ function Fikirler({ tarama, sec }: { tarama: Tarama; sec: (m: ModelOnerisi) => v
           <h3 className="alt-baslik-kucuk">🧩 Birkaç parça eksik</h3>
           <ul className="oneri-izgarasi">{yakin.map((o) => <FikirKarti key={o.model.id} o={o} sec={sec} />)}</ul>
         </>
+      )}
+      {dahaFazlaVar && (
+        <button
+          className="buyuk-buton turuncu"
+          onClick={() => {
+            setSayfa((s) => s + 1);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+        >
+          <span className="buton-emoji">🎲</span> Başka fikirler
+        </button>
       )}
       {diger.length > 0 &&
         (hepsi ? (

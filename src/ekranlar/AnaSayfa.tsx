@@ -70,7 +70,7 @@ export function AnaSayfa({ hata, fotoSecildi }: { hata: string | null; fotoSecil
           <li><span>🟫</span> Düz ve tek renk bir zemine yay</li>
           <li><span>↔️</span> Parçalar üst üste binmesin</li>
           <li><span>☀️</span> Aydınlık yerde, tam yukarıdan çek</li>
-          <li><span>📚</span> Çok parça varsa birkaç parti çek</li>
+          <li><span>🔍</span> Küçük parçaları ayrıca çek, “Fotoğraf ekle” ile listene ekle</li>
         </ul>
       </section>
 

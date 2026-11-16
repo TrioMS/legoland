@@ -15,7 +15,7 @@ export interface Env {
 
 const app = new Hono<{ Bindings: Env }>();
 
-const SAYIM_SURUMU = 'v7';
+const SAYIM_SURUMU = 'v8-yakin';
 
 const hata = (mesaj: string, kod: HataYaniti['kod']): HataYaniti => ({ hata: mesaj, kod });
 
@@ -55,6 +55,14 @@ app.post('/api/analiz', async (c) => {
   if (govde.resim.length > 8_000_000) {
     return c.json(hata('Fotoğraf çok büyük.', 'gecersiz'), 413);
   }
+  // Yakın çekimler isteğe bağlı: en fazla 4 tane, her biri makul boyutta ve geçerli bölgeli
+  const yakinlar = (Array.isArray(govde.yakinlar) ? govde.yakinlar : [])
+    .filter(
+      (y) =>
+        typeof y?.resim === 'string' && y.resim.length > 100 && y.resim.length < 4_000_000 &&
+        Array.isArray(y.bolge) && y.bolge.length === 4 && y.bolge.every((n) => Number.isFinite(n) && n >= 0 && n <= 1000),
+    )
+    .slice(0, 4);
 
   if (c.env.SAHTE_MOD === '1') {
     await new Promise((r) => setTimeout(r, 1500));
@@ -75,7 +83,7 @@ app.post('/api/analiz', async (c) => {
   if (onbellekte) return c.json<AnalizYaniti>(await onbellekte.json());
 
   try {
-    const sonuc = await parcalariTani(govde.resim, c.env.GEMINI_API_KEY, c.env.GEMINI_MODEL);
+    const sonuc = await parcalariTani(govde.resim, yakinlar, c.env.GEMINI_API_KEY, c.env.GEMINI_MODEL);
     const yanit: AnalizYaniti = { parcalar: birlestir(sonuc.parcalar), isaretler: sonuc.isaretler, not: sonuc.not };
     c.executionCtx.waitUntil(
       caches.default.put(

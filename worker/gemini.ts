@@ -153,6 +153,8 @@ Rules:
 - Count carefully. Group identical pieces (same part id and same color) into one row with the total count.
 - Determine size by counting studs. A brick is tall (about 3 plates high); a plate is thin; a tile is thin and smooth.
 - Pieces that are partly hidden still count if you can identify them.
+- SMALL pieces (1x1 and 1x2 bricks and plates, tiles, round 1x1 pieces) are easy to miss next to big ones.
+  Scan the whole photo systematically, region by region, and look for small pieces just as carefully as big ones.
 - Do NOT count the table, floor, box, baseplates used as background, or non-LEGO objects.
 - "guven" is your confidence for that row: "yuksek" (sure), "orta" (probably), "dusuk" (guess).
 - "kutular": for EVERY single piece in that row, give its bounding box as [ymin, xmin, ymax, xmax] normalized to 0-1000.
@@ -191,9 +193,32 @@ interface Sayim {
   toplam: number;
 }
 
-async function tekSayim(resimBase64: string, anahtar: string, model: string | undefined): Promise<Sayim> {
+/** Yakın çekim parçalarının ana fotoğraftaki yerleri (0-1000), istemcideki YAKIN_BOLGELER ile aynı sırada */
+const YAKIN_ADLARI = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
+
+function yakinCekimAnlatimi(bolgeler: Kutu[]): string {
+  return `Image 1 is the WHOLE photo. The next ${bolgeler.length} images are zoomed-in close-ups of parts of the SAME photo,
+given so you can see small pieces in detail. Their regions in image-1 coordinates [ymin, xmin, ymax, xmax] (0-1000):
+${bolgeler.map((b, i) => `- Image ${i + 2} (${YAKIN_ADLARI[i] ?? 'part'}): [${b.join(', ')}]`).join('\n')}
+The close-ups overlap each other and show the same pieces as image 1: count every physical piece EXACTLY ONCE.
+Use the close-ups mainly to find and identify small pieces. All "kutular" boxes must be in IMAGE 1 coordinates.`;
+}
+
+async function tekSayim(
+  resimBase64: string,
+  yakinlar: { resim: string; bolge: Kutu }[],
+  anahtar: string,
+  model: string | undefined,
+): Promise<Sayim> {
+  const resimParcasi = (data: string) => ({ inline_data: { mime_type: 'image/jpeg', data } });
+  const parts: unknown[] = [resimParcasi(resimBase64)];
+  if (yakinlar.length) {
+    for (const y of yakinlar) parts.push(resimParcasi(y.resim));
+    parts.push({ text: yakinCekimAnlatimi(yakinlar.map((y) => y.bolge)) });
+  }
+  parts.push({ text: SAYMA_TALIMATI });
   const ham = await geminiJson(
-    [{ inline_data: { mime_type: 'image/jpeg', data: resimBase64 } }, { text: SAYMA_TALIMATI }],
+    parts,
     SAYMA_SEMASI,
     anahtar,
     model,
@@ -237,11 +262,12 @@ const SAYIM_TEKRARI = 1;
  */
 export async function parcalariTani(
   resimBase64: string,
+  yakinlar: { resim: string; bolge: Kutu }[],
   anahtar: string,
   model?: string,
 ): Promise<{ parcalar: ParcaSatiri[]; isaretler: Isaret[]; not?: string }> {
   const sonuclar = await Promise.allSettled(
-    Array.from({ length: SAYIM_TEKRARI }, (_, i) => tekSayim(resimBase64, anahtar, model)),
+    Array.from({ length: SAYIM_TEKRARI }, () => tekSayim(resimBase64, yakinlar, anahtar, model)),
   );
   const sayimlar = sonuclar.flatMap((s) => (s.status === 'fulfilled' ? [s.value] : []));
   if (sayimlar.length === 0) throw (sonuclar[0] as PromiseRejectedResult).reason;

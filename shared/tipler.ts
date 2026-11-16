@@ -37,6 +37,8 @@ export interface MocOnerisi {
 export interface AnalizIstegi {
   /** base64 JPEG, "data:" öneki olmadan */
   resim: string;
+  /** Küçük parçaları görmek için aynı fotoğrafın yakın çekim parçaları ve ana fotoğraftaki yerleri */
+  yakinlar?: { resim: string; bolge: Kutu }[];
 }
 
 /** Fotoğraftaki bir parçanın yeri: [üst, sol, alt, sağ], 0-1000 arası (Gemini box_2d biçimi) */
