@@ -40,6 +40,7 @@ const SATIR_SEMASI = {
 
 interface GeminiYaniti {
   candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[];
+  usageMetadata?: Record<string, unknown>;
   error?: { message?: string; status?: string };
 }
 
@@ -73,7 +74,7 @@ async function geminiJson(
         signal: AbortSignal.timeout(Math.max(1000, sure)),
       });
       const v = (await y.json().catch(() => ({}))) as GeminiYaniti;
-      console.log('Gemini yanıtı', m, y.status, `${Date.now() - t0} ms`);
+      console.log('Gemini yanıtı', m, y.status, `${Date.now() - t0} ms`, v.candidates?.[0]?.finishReason ?? '', v.usageMetadata ?? '');
       return { y, v };
     } catch (e) {
       console.error('Gemini isteği zaman aşımı / ağ hatası', m, `${Date.now() - t0} ms`, e);
@@ -193,15 +194,162 @@ interface Sayim {
   toplam: number;
 }
 
-/** Yakın çekim parçalarının ana fotoğraftaki yerleri (0-1000), istemcideki YAKIN_BOLGELER ile aynı sırada */
-const YAKIN_ADLARI = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
+// ---- Yakın çekimlerle sayım: her çeyrekte parça parça kutu, birleştirme kodda --------
+//
+// Tüm fotoğrafta yapay zeka büyük parçalara odaklanıp küçükleri kaçırıyor, bitişik parçaları
+// tek kutuya koyuyor ve boş zemine kutu çiziyordu. Burada her yakın çekimde HER PARÇA için ayrı
+// bir kayıt istenir (adet yok: sayı = kutu sayısı). Çeyrekler birbirine bindiği için aynı parça
+// iki çeyrekte görünebilir; bunlar kodda kutular üst üste getirilerek tekilleştirilir.
 
-function yakinCekimAnlatimi(bolgeler: Kutu[]): string {
-  return `Image 1 is the WHOLE photo. The next ${bolgeler.length} images are zoomed-in close-ups of parts of the SAME photo,
-given so you can see small pieces in detail. Their regions in image-1 coordinates [ymin, xmin, ymax, xmax] (0-1000):
-${bolgeler.map((b, i) => `- Image ${i + 2} (${YAKIN_ADLARI[i] ?? 'part'}): [${b.join(', ')}]`).join('\n')}
-The close-ups overlap each other and show the same pieces as image 1: count every physical piece EXACTLY ONCE.
-Use the close-ups mainly to find and identify small pieces. All "kutular" boxes must be in IMAGE 1 coordinates.`;
+const BOLGE_TALIMATI = (n: number) => `You are an expert LEGO piece counter. The ${n} images are zoomed-in, overlapping parts
+(quarters) of ONE photo of loose LEGO pieces. For EACH image separately, list EVERY individual LEGO piece visible in it.
+
+Rules:
+- One entry = one physical piece, with ONE tight bounding box "kutu" = [ymin, xmin, ymax, xmax] in THAT image's own
+  coordinates, normalized to 0-1000. Never put two pieces in one box.
+- Pieces that touch each other are still separate pieces. Look at seams, gaps, outlines and stud counts:
+  two 2x2 bricks side by side are TWO entries (not one 2x4); a stack of 3 plates is THREE entries.
+- Never create an entry for empty background, floor or table texture, shadows or reflections. Every box must contain a LEGO piece.
+- Include a piece if at least half of it is inside the image. Pieces cut by the image edge are fine.
+- SMALL pieces (1x1, 1x2, plates, tiles, round pieces) matter exactly as much as big ones. Go through each image
+  systematically, region by region, and do not stop early. There may be many pieces.
+- Determine size by counting studs. A brick is tall (about 3 plates high); a plate is thin; a tile is thin and smooth.
+- Use ONLY the part ids and color ids from the catalogs below. If a piece does not fit any part id, use "diger".
+- "goruntu" is the image number (1-${n}). "guven": "yuksek" (sure), "orta" (probably), "dusuk" (guess).
+- "not": one short, friendly sentence in Turkish for a 7-year-old boy named Ilgaz (e.g. advice like spreading pieces apart
+  if they overlap). Leave empty if nothing to say.
+
+${KATALOGLAR}`;
+
+const BOLGE_SEMASI = {
+  type: 'OBJECT',
+  properties: {
+    goruntuler: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          goruntu: { type: 'INTEGER' },
+          parcalar: {
+            type: 'ARRAY',
+            items: {
+              type: 'OBJECT',
+              properties: {
+                parcaId: { type: 'STRING', enum: PARCA_IDLERI },
+                renkId: { type: 'STRING', enum: RENK_IDLERI },
+                guven: { type: 'STRING', enum: GUVENLER },
+                kutu: { type: 'ARRAY', items: { type: 'INTEGER' } },
+              },
+              required: ['parcaId', 'renkId', 'guven', 'kutu'],
+              propertyOrdering: ['parcaId', 'renkId', 'guven', 'kutu'],
+            },
+          },
+        },
+        required: ['goruntu', 'parcalar'],
+        propertyOrdering: ['goruntu', 'parcalar'],
+      },
+    },
+    not: { type: 'STRING' },
+  },
+  required: ['goruntuler'],
+  propertyOrdering: ['goruntuler', 'not'],
+};
+
+interface BolgeKutusu {
+  parcaId: string;
+  renkId: string;
+  guven: Guven;
+  /** Ana fotoğraftaki kutu (0-1000) */
+  kutu: Kutu;
+  bolge: number;
+}
+
+const alan = (k: Kutu) => Math.max(0, k[2] - k[0]) * Math.max(0, k[3] - k[1]);
+function kesisimOrani(a: Kutu, b: Kutu): number {
+  const ust = Math.max(a[0], b[0]);
+  const sol = Math.max(a[1], b[1]);
+  const alt = Math.min(a[2], b[2]);
+  const sag = Math.min(a[3], b[3]);
+  const kesisim = alan([ust, sol, alt, sag]);
+  // Küçük kutuya göre oran: kenarda kesilmiş yarım parça da aynı parça sayılsın
+  return kesisim / Math.max(1, Math.min(alan(a), alan(b)));
+}
+
+/**
+ * Farklı yakın çekimlerden gelen ve ana fotoğrafta üst üste binen aynı tür kutuları tek parça sayar.
+ * Aynı yakın çekim içindeki kutular hiçbir zaman birleştirilmez (onlar ayrı parçalar).
+ */
+export function bolgeKutulariniBirlestir(kutular: BolgeKutusu[]): BolgeKutusu[] {
+  const sira: Guven[] = ['dusuk', 'orta', 'yuksek'];
+  const kalan: BolgeKutusu[] = [];
+  // Büyük kutular önce: kenarda kesilmiş küçük parçası sonra gelip ona eşlensin
+  for (const k of [...kutular].sort((a, b) => alan(b.kutu) - alan(a.kutu))) {
+    // Aynı tür ve yarısından fazlası çakışıyorsa ya da tür farklı ama neredeyse tamamen aynı yerdeyse aynı parça
+    const ayni = kalan.find((v) => {
+      if (v.bolge === k.bolge) return false;
+      const oran = kesisimOrani(v.kutu, k.kutu);
+      return oran >= 0.75 || (v.parcaId === k.parcaId && oran >= 0.5);
+    });
+    if (ayni) {
+      // Aynı parça: renk farklı geldiyse daha emin olanı tut
+      if (sira.indexOf(k.guven) > sira.indexOf(ayni.guven)) Object.assign(ayni, { renkId: k.renkId, guven: k.guven });
+      continue;
+    }
+    kalan.push({ ...k });
+  }
+  return kalan;
+}
+
+async function bolgeSayimi(yakinlar: { resim: string; bolge: Kutu }[], anahtar: string, model: string | undefined): Promise<Sayim> {
+  const parts: unknown[] = yakinlar.map((y) => ({ inline_data: { mime_type: 'image/jpeg', data: y.resim } }));
+  parts.push({ text: BOLGE_TALIMATI(yakinlar.length) });
+  const ham = await geminiJson(parts, BOLGE_SEMASI, anahtar, model, { mediaResolution: 'MEDIA_RESOLUTION_HIGH' });
+
+  const tumu: BolgeKutusu[] = [];
+  for (const g of Array.isArray(ham?.goruntuler) ? ham.goruntuler : []) {
+    const i = Math.round(Number(g?.goruntu)) - 1;
+    const bolge = yakinlar[i]?.bolge;
+    if (!bolge) continue;
+    const [by1, bx1, by2, bx2] = bolge;
+    const h = by2 - by1;
+    const w = bx2 - bx1;
+    for (const p of Array.isArray(g?.parcalar) ? g.parcalar : []) {
+      const yerel = kutuTemizle(p?.kutu);
+      if (!yerel) continue;
+      const satir = satirTemizle({ ...p, adet: 1 });
+      tumu.push({
+        parcaId: satir.parcaId,
+        renkId: satir.renkId,
+        guven: GUVENLER.includes(p?.guven) ? p.guven : 'orta',
+        bolge: i,
+        kutu: [
+          Math.round(by1 + (yerel[0] * h) / 1000),
+          Math.round(bx1 + (yerel[1] * w) / 1000),
+          Math.round(by1 + (yerel[2] * h) / 1000),
+          Math.round(bx1 + (yerel[3] * w) / 1000),
+        ],
+      });
+    }
+  }
+  const tekil = bolgeKutulariniBirlestir(tumu);
+  console.log('Bölge sayımı', `${tumu.length} kutu → ${tekil.length} parça`, yakinlar.map((_, i) => tumu.filter((k) => k.bolge === i).length).join('/'));
+
+  const sira: Guven[] = ['dusuk', 'orta', 'yuksek'];
+  const satirlar = new Map<string, ParcaSatiri>();
+  for (const k of tekil) {
+    const anahtarK = `${k.parcaId}|${k.renkId}`;
+    const var_ = satirlar.get(anahtarK);
+    if (var_) {
+      var_.adet++;
+      if (sira.indexOf(k.guven) < sira.indexOf(var_.guven)) var_.guven = k.guven;
+    } else satirlar.set(anahtarK, { parcaId: k.parcaId, renkId: k.renkId, adet: 1, guven: k.guven });
+  }
+  return {
+    satirlar,
+    isaretler: tekil.map((k) => ({ parcaId: k.parcaId, renkId: k.renkId, kutu: k.kutu })),
+    toplam: tekil.length,
+    not: typeof ham?.not === 'string' && ham.not.trim() ? ham.not.trim() : undefined,
+  };
 }
 
 async function tekSayim(
@@ -210,13 +358,9 @@ async function tekSayim(
   anahtar: string,
   model: string | undefined,
 ): Promise<Sayim> {
+  if (yakinlar.length) return bolgeSayimi(yakinlar, anahtar, model);
   const resimParcasi = (data: string) => ({ inline_data: { mime_type: 'image/jpeg', data } });
-  const parts: unknown[] = [resimParcasi(resimBase64)];
-  if (yakinlar.length) {
-    for (const y of yakinlar) parts.push(resimParcasi(y.resim));
-    parts.push({ text: yakinCekimAnlatimi(yakinlar.map((y) => y.bolge)) });
-  }
-  parts.push({ text: SAYMA_TALIMATI });
+  const parts: unknown[] = [resimParcasi(resimBase64), { text: SAYMA_TALIMATI }];
   const ham = await geminiJson(
     parts,
     SAYMA_SEMASI,
