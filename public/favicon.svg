@@ -1,8 +1,42 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Zemin -->
   <rect width="512" height="512" rx="112" fill="#ff5a1f"/>
-  <rect x="104" y="214" width="304" height="176" rx="28" fill="#ffffff"/>
-  <rect x="140" y="152" width="88" height="80" rx="22" fill="#ffffff"/>
-  <rect x="284" y="152" width="88" height="80" rx="22" fill="#ffffff"/>
-  <circle cx="184" cy="300" r="22" fill="#ff5a1f" opacity=".9"/>
-  <circle cx="328" cy="300" r="22" fill="#ff5a1f" opacity=".9"/>
+  <ellipse cx="270" cy="430" rx="190" ry="22" fill="#000" opacity=".15"/>
+
+  <!-- Arka bacaklar ve kuyruk -->
+  <path d="M398 360 L452 342 L410 384 Z" fill="#9ccc3f"/>
+  <rect x="150" y="350" width="62" height="80" rx="28" fill="#86b832"/>
+  <rect x="320" y="350" width="62" height="80" rx="28" fill="#86b832"/>
+
+  <!-- Gövde (kabuğun altı) -->
+  <ellipse cx="270" cy="352" rx="168" ry="40" fill="#9ccc3f"/>
+
+  <!-- Ön bacaklar -->
+  <rect x="196" y="356" width="62" height="84" rx="28" fill="#9ccc3f"/>
+  <rect x="356" y="356" width="62" height="84" rx="28" fill="#9ccc3f"/>
+
+  <!-- Kabuk -->
+  <path d="M110 350 C110 228 190 168 280 168 C370 168 438 228 438 350 Z" fill="#4f8a2b"/>
+  <path d="M110 350 C110 228 190 168 280 168 C370 168 438 228 438 350" fill="none" stroke="#3b6b1f" stroke-width="10"/>
+  <path d="M170 350 C178 290 220 250 280 250 C340 250 382 290 390 350" fill="none" stroke="#3b6b1f" stroke-width="10"/>
+  <path d="M280 172 L280 250 M200 214 L232 266 M360 214 L328 266" stroke="#3b6b1f" stroke-width="10" stroke-linecap="round"/>
+  <rect x="104" y="338" width="340" height="24" rx="12" fill="#3b6b1f"/>
+
+  <!-- Kafa -->
+  <circle cx="108" cy="292" r="74" fill="#9ccc3f"/>
+  <circle cx="80" cy="280" r="13" fill="#1d1b19"/>
+  <circle cx="132" cy="280" r="13" fill="#1d1b19"/>
+  <circle cx="84" cy="276" r="4" fill="#fff"/>
+  <circle cx="136" cy="276" r="4" fill="#fff"/>
+  <path d="M86 314 Q106 330 126 314" fill="none" stroke="#1d1b19" stroke-width="9" stroke-linecap="round"/>
+
+  <!-- Kabuğun üstünde taşıdığı Lego tuğlası -->
+  <g transform="rotate(-6 282 130)">
+    <rect x="200" y="84" width="58" height="34" rx="9" fill="#ffc629"/>
+    <rect x="306" y="84" width="58" height="34" rx="9" fill="#ffc629"/>
+    <rect x="200" y="84" width="58" height="12" rx="6" fill="#ffe27a"/>
+    <rect x="306" y="84" width="58" height="12" rx="6" fill="#ffe27a"/>
+    <rect x="186" y="106" width="192" height="80" rx="14" fill="#ffc629"/>
+    <rect x="186" y="164" width="192" height="22" rx="10" fill="#e0a800"/>
+  </g>
 </svg>
